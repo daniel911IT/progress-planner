@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Progress Planner
 
 Progress Planner ist eine responsive Webanwendung, um langfristige Ziele in Teilbereiche aufzuteilen und deren Fortschritt festzuhalten.
@@ -29,3 +30,6 @@ Ein Projekt enthält beliebig viele Teilbereiche. Der Fortschritt wird pro Berei
 - `POST /api/projects`, `PUT /api/projects/:id`, `DELETE /api/projects/:id`
 - `POST /api/projects/:id/subareas`
 - `PUT /api/subareas/:id`, `DELETE /api/subareas/:id`
+=======
+# progress-planner
+>>>>>>> 4e4b297d50ffb52a53fb10df9b8d05e7c6b8624d
