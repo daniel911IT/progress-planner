@@ -6,7 +6,7 @@ defineProps<{ achievement: Achievement; projectName?: string }>();
 const emit = defineEmits<{ edit: []; delete: []; toggle: [achieved: boolean] }>();
 
 const rarityLabels: Record<AchievementRarity, string> = {
-  bronze: 'Bronze', silver: 'Silber', gold: 'Gold', platinum: 'Platin', diamond: 'Diamant'
+  bronze: 'Bronze', silver: 'Silber', gold: 'Gold', ruby: 'Rubin', diamond: 'Diamant'
 };
 </script>
 

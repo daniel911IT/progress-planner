@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue';
 import {
-  ArrowLeft, ArrowRight, ArrowUpRight, Award, BookOpen, BriefcaseBusiness, CalendarDays, Check, CheckCircle2,
+  ArrowLeft, ArrowRight, Award, BookOpen, BriefcaseBusiness, CalendarDays, CheckCircle2,
   ChevronDown, CircleHelp, Clock3, Download, Dumbbell, FolderKanban, HeartPulse, LayoutDashboard,
   Plus, Search, Settings2, Sparkles, Target, Trash2, Trophy, Upload, X, Plane
 } from 'lucide-vue-next';
@@ -9,7 +9,6 @@ import { dataStore, initializeStorage, validateBackup } from './storage';
 import type { Achievement, AchievementPayload, AchievementRarity, HistoryRecord, Project, ProjectPayload, Subarea, SubareaPayload } from './types';
 import AchievementCard from './components/AchievementCard.vue';
 import ProjectCard from './components/ProjectCard.vue';
-import ProgressChart from './components/ProgressChart.vue';
 import ProgressRing from './components/ProgressRing.vue';
 import SubareaRow from './components/SubareaRow.vue';
 
@@ -40,17 +39,18 @@ const achievementForm = reactive<AchievementPayload>({ name: '', description: ''
 
 const selectedProject = computed(() => projects.value.find((project) => project.id === selectedProjectId.value) ?? null);
 const selectedProjectColor = computed(() => selectedProject.value?.color ?? '#9a8cff');
-const allAreas = computed(() => projects.value.flatMap((project) => project.subareas));
 const projectNames = computed(() => new Map(projects.value.map((project) => [project.id, project.name])));
 const achievedAchievements = computed(() => achievements.value.filter((achievement) => achievement.achieved));
 const achievedByRarity = computed(() => Object.fromEntries(rarityOptions.map((option) => [option.id, achievedAchievements.value.filter((achievement) => achievement.rarity === option.id).length])) as Record<AchievementRarity, number>);
-const recentAchievements = computed(() => [...achievedAchievements.value].sort((a, b) => (b.achievedAt ?? '').localeCompare(a.achievedAt ?? '') || b.updatedAt.localeCompare(a.updatedAt)).slice(0, 3));
 const visibleAchievements = computed(() => achievements.value.filter((achievement) => achievementFilter.value === 'all' || achievement.rarity === achievementFilter.value).sort((a, b) => Number(b.achieved) - Number(a.achieved) || (b.achievedAt ?? '').localeCompare(a.achievedAt ?? '') || a.name.localeCompare(b.name, 'de')));
-const completedAreas = computed(() => allAreas.value.filter((area) => area.progress === 100).length);
-const overallProgress = computed(() => {
-  const weight = allAreas.value.reduce((sum, area) => sum + area.weight, 0);
-  return weight ? Math.round(allAreas.value.reduce((sum, area) => sum + area.progress * area.weight, 0) / weight) : 0;
-});
+const overviewProjects = computed(() => [...projects.value].sort((a, b) => {
+  const statusOrder = (project: Project) => project.progress >= 100 ? 2 : project.progress === 0 ? 1 : 0;
+  const aStatus = statusOrder(a);
+  const bStatus = statusOrder(b);
+  if (aStatus !== bStatus) return aStatus - bStatus;
+  if (aStatus === 0 && a.progress !== b.progress) return b.progress - a.progress;
+  return b.updatedAt.localeCompare(a.updatedAt) || a.name.localeCompare(b.name, 'de');
+}));
 const visibleProjects = computed(() => {
   const query = search.value.trim().toLocaleLowerCase('de');
   if (!query) return projects.value;
@@ -65,7 +65,7 @@ const iconOptions = [
 ];
 const rarityOptions: Array<{ id: AchievementRarity; label: string }> = [
   { id: 'bronze', label: 'Bronze' }, { id: 'silver', label: 'Silber' }, { id: 'gold', label: 'Gold' },
-  { id: 'platinum', label: 'Platin' }, { id: 'diamond', label: 'Diamant' }
+  { id: 'ruby', label: 'Rubin' }, { id: 'diamond', label: 'Diamant' }
 ];
 const selectedProjectIcon = computed(() => {
   const project = selectedProject.value;
@@ -403,7 +403,7 @@ onMounted(async () => {
       </nav>
 
       <div class="sidebar-projects">
-        <div class="sidebar-section-head"><span class="nav-label">DEINE PROJEKTE</span><button class="tiny-icon" aria-label="Projekt erstellen" @click="resetProjectForm()"><Plus :size="15" /></button></div>
+        <div class="sidebar-section-head"><span class="nav-label">DEINE PROJEKTE</span><button v-if="view === 'projects'" class="tiny-icon" aria-label="Projekt erstellen" @click="resetProjectForm()"><Plus :size="15" /></button></div>
         <button v-for="project in projects.slice(0, 5)" :key="project.id" class="sidebar-project" :class="{ selected: selectedProjectId === project.id }" @click="openProject(project)">
           <i :style="{ backgroundColor: project.color }"></i><span>{{ project.name }}</span><small>{{ project.progress }}%</small>
         </button>
@@ -482,35 +482,26 @@ onMounted(async () => {
           </section>
         </template>
 
+        <template v-else-if="view === 'overview'">
+          <section class="welcome-header overview-welcome">
+            <div><span class="eyebrow">FORTSCHRITT DEINER PROJEKTE</span><h1>Übersicht</h1><p>Der aktuelle Stand aller deiner Projekte auf einen Blick.</p></div>
+          </section>
+          <section class="projects-section overview-projects-section" aria-label="Fortschritt aller Projekte">
+            <div v-if="isLoading" class="loading-grid"><div v-for="n in 3" :key="n" class="skeleton-card"></div></div>
+            <div v-else-if="overviewProjects.length" class="projects-grid"><ProjectCard v-for="project in overviewProjects" :key="project.id" :project="project" layout="overview" @open="openProject(project)" /></div>
+            <div v-else class="empty-projects"><div class="empty-illustration"><FolderKanban :size="23" /></div><h3>Noch keine Projekte</h3><p>Erstelle ein Projekt im Bereich „Projekte“, um hier den Fortschritt zu sehen.</p><button class="button button-quiet" @click="goTo('projects')">Zur Projektverwaltung <ArrowRight :size="15" /></button></div>
+          </section>
+        </template>
+
         <template v-else>
           <section class="welcome-header">
-            <div><span class="eyebrow">{{ view === 'overview' ? 'DEIN PERSÖNLICHER FORTSCHRITT' : 'DEINE ZIELE IM BLICK' }}</span><h1>{{ view === 'overview' ? 'Schön, dass du da bist.' : 'Deine Projekte' }}</h1><p>{{ view === 'overview' ? 'Große Ziele entstehen aus vielen kleinen Schritten.' : 'Alles, woran du gerade arbeitest, an einem Ort.' }}</p></div>
+            <div><span class="eyebrow">DEINE ZIELE IM BLICK</span><h1>Deine Projekte</h1><p>Alles, woran du gerade arbeitest, an einem Ort.</p></div>
             <button class="button button-primary create-button" @click="resetProjectForm()"><Plus :size="17" /> Neues Projekt</button>
           </section>
-
-          <template v-if="view === 'overview'">
-            <section class="overview-grid">
-              <div class="progress-overview-card">
-                <div class="card-overline"><span class="eyebrow">DEIN ÜBERBLICK</span><button class="icon-button" aria-label="Details"><ArrowUpRight :size="17" /></button></div>
-                <div class="overview-chart-layout"><ProgressChart :value="overallProgress" /><div class="overview-chart-copy"><span>Gesamtfortschritt</span><h2>{{ overallProgress }}<small>%</small></h2><p>über alle deine Bereiche</p><div class="chart-legend"><span><i class="legend-dot lavender"></i>Erreicht</span><span><i class="legend-dot gray"></i>Noch vor dir</span></div></div></div>
-                <div class="overview-card-footer"><span><CheckCircle2 :size="15" />{{ completedAreas }} von {{ allAreas.length }} Bereichen abgeschlossen</span><span class="overview-footer-icon"><Sparkles :size="14" /></span></div>
-              </div>
-              <div class="stats-stack">
-                <div class="metric-card"><span class="metric-icon violet"><FolderKanban :size="17" /></span><div><small>Aktive Projekte</small><strong>{{ projects.length }}</strong><span>{{ projects.length === 1 ? 'Ein Ziel im Fokus' : 'Ziele im Fokus' }}</span></div><span class="metric-trend"><ArrowUpRight :size="14" /></span></div>
-                <div class="metric-card"><span class="metric-icon green"><Target :size="17" /></span><div><small>Teilbereiche</small><strong>{{ allAreas.length }}</strong><span>{{ completedAreas }} erfolgreich abgeschlossen</span></div><span class="metric-trend green-trend"><Check :size="14" /></span></div>
-                <div class="achievement-mini-card">
-                  <div class="achievement-mini-head"><span><Trophy :size="15" /><strong>Achievements</strong><b>{{ achievedAchievements.length }}</b></span><button class="text-button" @click="goTo('achievements')">Alle <ArrowRight :size="13" /></button></div>
-                  <div class="achievement-mini-rarities"><span v-for="rarity in rarityOptions" :key="rarity.id" :class="`rarity-${rarity.id}`" :title="rarity.label"><i></i>{{ achievedByRarity[rarity.id] }}</span></div>
-                  <div class="achievement-mini-recent"><span class="eyebrow">ZULETZT ERREICHT</span><p v-for="achievement in recentAchievements.slice(0, 2)" :key="achievement.id"><i :class="`rarity-${achievement.rarity}`">{{ achievement.icon || '🏆' }}</i><span>{{ achievement.name }}</span><small>{{ achievement.achievedAt ? dateLabel(achievement.achievedAt) : '' }}</small></p><p v-if="recentAchievements.length === 0" class="achievement-mini-empty">Noch kein Achievement erreicht.</p></div>
-                </div>
-              </div>
-            </section>
-          </template>
-
           <section class="projects-section">
-            <div class="section-heading projects-heading"><div><div class="eyebrow">{{ view === 'overview' ? 'WORAN DU ARBEITEST' : 'ALLE ZIELE' }}</div><h2>Deine Projekte <span>{{ projects.length }}</span></h2><p>Deine Ziele, übersichtlich an einem Ort.</p></div><div class="project-controls"><label class="search-box"><Search :size="16" /><input v-model="search" placeholder="Projekt suchen" aria-label="Projekt suchen" /><kbd>⌘ K</kbd></label><button v-if="view === 'overview' && projects.length > 3" class="text-button" @click="goTo('projects')">Alle ansehen <ArrowRight :size="14" /></button></div></div>
+            <div class="section-heading projects-heading"><div><div class="eyebrow">ALLE ZIELE</div><h2>Deine Projekte <span>{{ projects.length }}</span></h2><p>Deine Ziele, übersichtlich an einem Ort.</p></div><div class="project-controls"><label class="search-box"><Search :size="16" /><input v-model="search" placeholder="Projekt suchen" aria-label="Projekt suchen" /><kbd>⌘ K</kbd></label></div></div>
             <div v-if="isLoading" class="loading-grid"><div v-for="n in 3" :key="n" class="skeleton-card"></div></div>
-            <div v-else-if="visibleProjects.length" class="projects-grid"><ProjectCard v-for="project in (view === 'overview' ? visibleProjects.slice(0, 3) : visibleProjects)" :key="project.id" :project="project" @open="openProject(project)" @edit="resetProjectForm(project)" /></div>
+            <div v-else-if="visibleProjects.length" class="projects-grid"><ProjectCard v-for="project in visibleProjects" :key="project.id" :project="project" @open="openProject(project)" @edit="resetProjectForm(project)" /></div>
             <div v-else-if="projects.length === 0" class="empty-projects"><div class="empty-illustration"><FolderKanban :size="23" /></div><h3>Womit möchtest du beginnen?</h3><p>Erstelle dein erstes Projekt und mache aus einem großen Ziel kleine, machbare Schritte.</p><button class="button button-primary" @click="resetProjectForm()"><Plus :size="16" /> Erstes Projekt erstellen</button></div>
             <div v-else class="empty-search"><Search :size="18" /><p>Keine Projekte für „{{ search }}“ gefunden.</p><button class="text-button" @click="search = ''">Suche zurücksetzen</button></div>
           </section>

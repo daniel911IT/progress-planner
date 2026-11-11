@@ -12,7 +12,7 @@ import type {
 } from './types';
 
 const DATABASE_NAME = 'progress-planner';
-const DATABASE_VERSION = 2;
+const DATABASE_VERSION = 3;
 const PROJECTS = 'projects';
 const SUBAREAS = 'subareas';
 const HISTORY = 'history';
@@ -47,6 +47,18 @@ function openDatabase(): Promise<IDBDatabase> {
         const achievements = database.createObjectStore(ACHIEVEMENTS, { keyPath: 'id', autoIncrement: true });
         achievements.createIndex('projectId', 'projectId', { unique: false });
         achievements.createIndex('achievedAt', 'achievedAt', { unique: false });
+      }
+
+      const achievements = request.transaction?.objectStore(ACHIEVEMENTS);
+      if (achievements) {
+        const cursorRequest = achievements.openCursor();
+        cursorRequest.onsuccess = () => {
+          const cursor = cursorRequest.result;
+          if (!cursor) return;
+          const achievement = cursor.value as Omit<Achievement, 'rarity'> & { rarity: string };
+          if (achievement.rarity === 'platinum') cursor.update({ ...achievement, rarity: 'ruby' });
+          cursor.continue();
+        };
       }
     };
 
@@ -208,11 +220,11 @@ const historyActions = new Set<HistoryDraft['action']>([
   'achievement_deleted', 'achievement_unlocked', 'achievement_linked', 'achievement_unlinked'
 ]);
 
-const achievementRarities = new Set(['bronze', 'silver', 'gold', 'platinum', 'diamond']);
+const achievementRarities = new Set(['bronze', 'silver', 'gold', 'ruby', 'diamond']);
 
 function normalizeAchievement(value: unknown): Achievement {
   const input = asRecord(value, 'Achievement');
-  const rarity = input.rarity;
+  const rarity = input.rarity === 'platinum' ? 'ruby' : input.rarity;
   if (typeof rarity !== 'string' || !achievementRarities.has(rarity)) throw new Error('Ein Achievement hat eine ungültige Seltenheitsstufe.');
   if (typeof input.achieved !== 'boolean') throw new Error('Der Status eines Achievements ist ungültig.');
   const achievedAt = input.achievedAt === null || input.achievedAt === undefined || input.achievedAt === ''
@@ -274,20 +286,20 @@ export function validateBackup(input: unknown): RestorableBackup {
     }
     assertUniqueIds(projects, 'Projekt');
     assertUniqueIds(subareas, 'Teilbereich');
-    return { format: BACKUP_FORMAT, version: 2, exportedAt: now(), projects, subareas, history: [], achievements: [] };
+    return { format: BACKUP_FORMAT, version: 3, exportedAt: now(), projects, subareas, history: [], achievements: [] };
   }
 
   const backup = asRecord(input, 'JSON-Sicherung');
-  if (backup.format !== BACKUP_FORMAT || (backup.version !== 1 && backup.version !== 2)) throw new Error('Dieses Sicherungsformat wird nicht unterstützt.');
+  if (backup.format !== BACKUP_FORMAT || (backup.version !== 1 && backup.version !== 2 && backup.version !== 3)) throw new Error('Dieses Sicherungsformat wird nicht unterstützt.');
   if (!Array.isArray(backup.projects) || !Array.isArray(backup.subareas) || !Array.isArray(backup.history)) {
     throw new Error('Die Sicherung benötigt Projekte, Teilbereiche und Verlaufseinträge.');
   }
-  if (backup.version === 2 && !Array.isArray(backup.achievements)) throw new Error('Die Sicherung benötigt eine Achievement-Liste.');
+  if (backup.version >= 2 && !Array.isArray(backup.achievements)) throw new Error('Die Sicherung benötigt eine Achievement-Liste.');
 
   const projects = backup.projects.map(normalizeProject);
   const subareas = backup.subareas.map((area) => normalizeSubarea(area));
   const history = backup.history.map(normalizeHistory);
-  const achievements = backup.version === 2 ? (backup.achievements as unknown[]).map(normalizeAchievement) : [];
+  const achievements = backup.version >= 2 ? (backup.achievements as unknown[]).map(normalizeAchievement) : [];
   assertUniqueIds(projects, 'Projekt');
   assertUniqueIds(subareas, 'Teilbereich');
   assertUniqueIds(achievements, 'Achievement');
@@ -299,7 +311,7 @@ export function validateBackup(input: unknown): RestorableBackup {
 
   return {
     format: BACKUP_FORMAT,
-    version: 2,
+    version: 3,
     exportedAt: readDate(backup.exportedAt),
     projects,
     subareas,
@@ -599,7 +611,7 @@ export const dataStore = {
 
   async exportBackup(): Promise<BackupFile> {
     const records = await readAllStores();
-    return { format: BACKUP_FORMAT, version: 2, exportedAt: now(), ...records };
+    return { format: BACKUP_FORMAT, version: 3, exportedAt: now(), ...records };
   },
 
   async importBackup(backup: RestorableBackup): Promise<{ projects: number; subareas: number; achievements: number }> {

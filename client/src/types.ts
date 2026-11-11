@@ -41,7 +41,7 @@ export interface SubareaPayload {
   weight: number;
 }
 
-export type AchievementRarity = 'bronze' | 'silver' | 'gold' | 'platinum' | 'diamond';
+export type AchievementRarity = 'bronze' | 'silver' | 'gold' | 'ruby' | 'diamond';
 
 export interface Achievement {
   id: number;
@@ -75,7 +75,7 @@ export interface HistoryRecord extends HistoryDraft {
 
 export interface BackupFile {
   format: 'progress-planner-backup';
-  version: 2;
+  version: 3;
   exportedAt: string;
   projects: ProjectRecord[];
   subareas: Subarea[];

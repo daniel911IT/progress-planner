@@ -149,6 +149,23 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .projects-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 13px; }
 .project-card { min-width: 0; min-height: 219px; padding: 16px; cursor: pointer; transition: transform .2s ease, border-color .2s ease, background .2s ease; }
 .project-card:hover { transform: translateY(-2px); border-color: rgba(169, 152, 255, .2); background: linear-gradient(145deg, rgba(28, 33, 46, .98), rgba(20, 24, 35, .98)); }
+.project-card-overview { display: flex; min-height: 160px; flex-direction: column; justify-content: center; gap: 14px; padding: 18px; }
+.project-card-overview:hover { border-color: rgba(169, 152, 255, .28); }
+.project-card-completed { opacity: .76; background: linear-gradient(145deg, rgba(21, 25, 35, .96), rgba(17, 21, 29, .96)); }
+.project-overview-head { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; }
+.project-overview-head h3 { overflow: hidden; margin: 0; color: #ececf2; font: 650 13px var(--font-display); text-overflow: ellipsis; white-space: nowrap; }
+.project-status { display: inline-flex; min-height: 23px; align-items: center; padding: 0 8px; border: 1px solid; border-radius: 99px; font-size: 9px; font-weight: 600; white-space: nowrap; }
+.project-status.status-planned { color: #a0a6b3; border-color: rgba(160,166,179,.18); background: rgba(160,166,179,.07); }
+.project-status.status-in-progress { color: #c7baff; border-color: rgba(169,152,255,.22); background: rgba(169,152,255,.09); }
+.project-status.status-completed { color: #91e4c5; border-color: rgba(145,228,197,.2); background: rgba(145,228,197,.08); }
+.project-overview-progress-label { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: -8px; color: #9299a8; font-size: 10px; }
+.project-overview-progress-label strong { color: #f0eff5; font: 700 20px var(--font-display); letter-spacing: -.45px; }
+.project-overview-progress-label small { margin-left: 2px; color: #aab0bc; font-size: 12px; font-weight: 500; }
+.overview-progress-track { height: 5px; }
+.overview-progress-track span { background: linear-gradient(90deg, #9581f6, #b4a5ff); transition: width .3s ease; }
+.project-card-completed .overview-progress-track span { background: #82cbb0; }
+.project-overview-meta { display: flex; align-items: center; justify-content: space-between; color: #8991a0; font-size: 9px; }
+.project-overview-meta span:last-child { color: #aab2bf; }
 .project-card-top { display: flex; align-items: flex-start; justify-content: space-between; }
 .project-icon { display: grid; width: 37px; height: 37px; place-items: center; border: 1px solid rgba(255,255,255,.035); border-radius: 10px; }
 .card-arrow { width: 26px; height: 26px; }
@@ -305,7 +322,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .rarity-bronze { --rarity-color: #ce9167; --rarity-tint: rgba(206, 145, 103, .11); --rarity-line: rgba(206, 145, 103, .24); }
 .rarity-silver { --rarity-color: #b9c3d0; --rarity-tint: rgba(185, 195, 208, .1); --rarity-line: rgba(185, 195, 208, .23); }
 .rarity-gold { --rarity-color: #e5c36a; --rarity-tint: rgba(229, 195, 106, .11); --rarity-line: rgba(229, 195, 106, .25); }
-.rarity-platinum { --rarity-color: #b5d0db; --rarity-tint: rgba(181, 208, 219, .11); --rarity-line: rgba(181, 208, 219, .25); }
+.rarity-ruby { --rarity-color: #ff5969; --rarity-tint: rgba(132, 19, 38, .2); --rarity-line: rgba(226, 55, 76, .34); }
 .rarity-diamond { --rarity-color: #79d9e2; --rarity-tint: rgba(121, 217, 226, .11); --rarity-line: rgba(121, 217, 226, .25); }
 .achievement-welcome { margin-bottom: 22px; }
 .achievement-overview { display: grid; grid-template-columns: minmax(220px, .78fr) minmax(0, 1.8fr); gap: 12px; margin-bottom: 33px; }
@@ -433,6 +450,9 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   .metric-card small, .metric-card div > span { font-size: 8px; }
   .metric-card strong { font-size: 16px; }
   .projects-grid, .loading-grid { grid-template-columns: 1fr; }
+  .project-card-overview { min-height: 150px; }
+  .project-overview-head { grid-template-columns: auto minmax(0, 1fr); gap: 8px; }
+  .project-overview-head .project-status { grid-column: 2; justify-self: start; margin-top: -4px; }
   .achievements-grid { grid-template-columns: 1fr; }
   .project-card { min-height: 205px; }
   .project-controls { gap: 9px; }
