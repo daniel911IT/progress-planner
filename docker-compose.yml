@@ -1,0 +1,17 @@
+services:
+  database:
+    image: mariadb:11.4
+    restart: unless-stopped
+    environment:
+      MARIADB_DATABASE: progress_planner
+      MARIADB_USER: progress_planner
+      MARIADB_PASSWORD: change_me
+      MARIADB_ROOT_PASSWORD: local_root_password
+    ports:
+      - "3306:3306"
+    volumes:
+      - progress_planner_data:/var/lib/mysql
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/001-schema.sql:ro
+
+volumes:
+  progress_planner_data:

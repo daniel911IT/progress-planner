@@ -1,0 +1,16 @@
+{
+  "name": "progress-planner",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "workspaces": ["client", "server"],
+  "scripts": {
+    "dev": "concurrently -k \"npm:dev:server\" \"npm:dev:client\"",
+    "dev:client": "npm --workspace client run dev",
+    "dev:server": "npm --workspace server run dev",
+    "build": "npm --workspace client run build && npm --workspace server run build"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}

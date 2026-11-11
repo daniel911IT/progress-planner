@@ -1,0 +1,31 @@
+CREATE DATABASE IF NOT EXISTS progress_planner CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+USE progress_planner;
+
+CREATE TABLE IF NOT EXISTS projects (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  name VARCHAR(120) NOT NULL,
+  description TEXT NOT NULL,
+  color VARCHAR(24) NOT NULL DEFAULT '#9a8cff',
+  icon VARCHAR(40) NOT NULL DEFAULT 'sparkles',
+  target_date DATE NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  INDEX idx_projects_updated (updated_at)
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS subareas (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  project_id BIGINT UNSIGNED NOT NULL,
+  name VARCHAR(120) NOT NULL,
+  description TEXT NOT NULL,
+  progress TINYINT UNSIGNED NOT NULL DEFAULT 0,
+  weight DECIMAL(8,2) NOT NULL DEFAULT 1,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  INDEX idx_subareas_project (project_id),
+  CONSTRAINT fk_subareas_project FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+  CONSTRAINT chk_subareas_progress CHECK (progress <= 100 AND MOD(progress, 5) = 0),
+  CONSTRAINT chk_subareas_weight CHECK (weight > 0)
+) ENGINE=InnoDB;
