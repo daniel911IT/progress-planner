@@ -29,6 +29,7 @@ const projectForm = reactive<ProjectPayload>({ name: '', description: '', color:
 const areaForm = reactive<SubareaPayload>({ name: '', description: '', progress: 0, weight: 1 });
 
 const selectedProject = computed(() => projects.value.find((project) => project.id === selectedProjectId.value) ?? null);
+const selectedProjectColor = computed(() => selectedProject.value?.color ?? '#9a8cff');
 const allAreas = computed(() => projects.value.flatMap((project) => project.subareas));
 const completedAreas = computed(() => allAreas.value.filter((area) => area.progress === 100).length);
 const overallProgress = computed(() => {
@@ -47,6 +48,10 @@ const iconOptions = [
   { id: 'book', label: 'Buch', icon: BookOpen }, { id: 'work', label: 'Arbeit', icon: BriefcaseBusiness },
   { id: 'health', label: 'Gesundheit', icon: HeartPulse }, { id: 'travel', label: 'Reisen', icon: Plane }
 ];
+const selectedProjectIcon = computed(() => {
+  const project = selectedProject.value;
+  return iconOptions.find((option) => option.id === project?.icon)?.icon ?? Sparkles;
+});
 
 async function loadProjects() {
   isLoading.value = true;
@@ -222,7 +227,7 @@ onMounted(loadProjects);
         <template v-if="selectedProject">
           <div class="detail-back-row"><button class="back-button" @click="goTo('projects')"><ArrowLeft :size="16" /> Alle Projekte</button><span class="detail-created"><Clock3 :size="14" /> Erstellt am {{ dateLabel(selectedProject.createdAt) }}</span></div>
           <section class="detail-heading">
-            <div class="detail-title-side"><div class="detail-project-icon" :style="{ backgroundColor: `${selectedProject.color}18`, color: selectedProject.color }"><component :is="iconOptions.find((option) => option.id === selectedProject.icon)?.icon ?? Sparkles" :size="26" /></div><div><div class="eyebrow">PROJEKTÜBERSICHT</div><h1>{{ selectedProject.name }}</h1><p>{{ selectedProject.description || 'Ein Schritt nach dem anderen.' }}</p></div></div>
+            <div class="detail-title-side"><div class="detail-project-icon" :style="{ backgroundColor: `${selectedProjectColor}18`, color: selectedProjectColor }"><component :is="selectedProjectIcon" :size="26" /></div><div><div class="eyebrow">PROJEKTÜBERSICHT</div><h1>{{ selectedProject.name }}</h1><p>{{ selectedProject.description || 'Ein Schritt nach dem anderen.' }}</p></div></div>
             <div class="detail-actions"><button class="button button-quiet" @click="resetProjectForm(selectedProject)"><Settings2 :size="15" /> Bearbeiten</button><button class="icon-button danger-icon" aria-label="Projekt löschen" @click="removeProject(selectedProject)"><Trash2 :size="16" /></button></div>
           </section>
 

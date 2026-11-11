@@ -8,7 +8,8 @@
     "dev": "concurrently -k \"npm:dev:server\" \"npm:dev:client\"",
     "dev:client": "npm --workspace client run dev",
     "dev:server": "npm --workspace server run dev",
-    "build": "npm --workspace client run build && npm --workspace server run build"
+    "build": "npm --workspace client run build && npm --workspace server run build",
+    "check:pwa": "npm run build && npm --workspace client run check:pwa"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"

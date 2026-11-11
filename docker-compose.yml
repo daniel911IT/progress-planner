@@ -3,10 +3,10 @@ services:
     image: mariadb:11.4
     restart: unless-stopped
     environment:
-      MARIADB_DATABASE: progress_planner
-      MARIADB_USER: progress_planner
-      MARIADB_PASSWORD: change_me
-      MARIADB_ROOT_PASSWORD: local_root_password
+      MARIADB_DATABASE: ${DB_NAME:-progress_planner}
+      MARIADB_USER: ${DB_USER:-progress_planner}
+      MARIADB_PASSWORD: ${DB_PASSWORD:-change_me}
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-local_root_password}
     ports:
       - "3306:3306"
     volumes:
