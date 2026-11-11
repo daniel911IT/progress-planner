@@ -3,15 +3,11 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
-  "workspaces": ["client", "server"],
+  "workspaces": ["client"],
   "scripts": {
-    "dev": "concurrently -k \"npm:dev:server\" \"npm:dev:client\"",
-    "dev:client": "npm --workspace client run dev",
-    "dev:server": "npm --workspace server run dev",
-    "build": "npm --workspace client run build && npm --workspace server run build",
+    "dev": "npm --workspace client run dev",
+    "build": "npm --workspace client run build",
+    "preview": "npm --workspace client run preview",
     "check:pwa": "npm run build && npm --workspace client run check:pwa"
-  },
-  "devDependencies": {
-    "concurrently": "^9.1.2"
   }
 }

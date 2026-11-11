@@ -1,4 +1,4 @@
-const CACHE_NAME = 'progress-planner-static-v1';
+const CACHE_NAME = 'progress-planner-static-v2';
 const APP_SHELL = [
   '/manifest.webmanifest',
   '/icons/app-192.png',
@@ -38,7 +38,7 @@ self.addEventListener('fetch', (event) => {
   if (request.method !== 'GET') return;
 
   const url = new URL(request.url);
-  if (url.origin !== self.location.origin || url.pathname.startsWith('/api/')) return;
+  if (url.origin !== self.location.origin) return;
 
   if (request.mode === 'navigate') {
     event.respondWith((async () => {

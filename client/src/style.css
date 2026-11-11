@@ -3,7 +3,7 @@
 @tailwind utilities;
 
 :root {
-  font-family: 'DM Sans', sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
   color: #eff0f5;
   background: #0d1018;
   font-synthesis: none;
@@ -18,7 +18,7 @@
   --faint: #686f7e;
   --lavender: #a998ff;
   --green: #91e4c5;
-  --font-display: 'Manrope', sans-serif;
+  --font-display: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
 }
 
 * { box-sizing: border-box; }
@@ -75,6 +75,9 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .breadcrumbs strong { color: #c7c9d1; font-weight: 500; }
 .topbar-right { gap: 15px; }
 .today-label { display: flex; align-items: center; gap: 7px; color: #898f9f; }
+.data-action { width: 29px; height: 29px; border: 1px solid rgba(255,255,255,.065); color: #929aaa; background: rgba(255,255,255,.025); }
+.data-action:hover { color: #d5cbff; border-color: rgba(169,152,255,.22); background: rgba(169,152,255,.08); }
+.visually-hidden-input { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; clip-path: inset(50%); }
 .topbar-avatar { width: 28px; height: 28px; border-radius: 50%; font-size: 11px; }
 .mobile-brand { display: none; }
 .page-content { width: min(1160px, 100%); margin: 0 auto; padding: 42px calc(clamp(24px, 4.3vw, 66px) + env(safe-area-inset-right)) calc(22px + env(safe-area-inset-bottom)) calc(clamp(24px, 4.3vw, 66px) + env(safe-area-inset-left)); }
@@ -172,6 +175,15 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .empty-search p { margin: 10px 0 4px; font-size: 11px; }
 .page-footer { display: flex; justify-content: space-between; gap: 16px; margin-top: 50px; padding-top: 14px; border-top: 1px solid rgba(255,255,255,.045); color: #626a79; font-size: 9px; }
 .page-footer i { margin: 0 4px; color: #777f8f; font-style: normal; }
+.history-section { margin-top: 35px; }
+.history-list { display: grid; gap: 1px; overflow: hidden; border: 1px solid var(--line); border-radius: 11px; background: var(--line); }
+.history-row { display: flex; min-height: 58px; align-items: center; gap: 11px; padding: 10px 13px; background: #151923; }
+.history-marker { display: grid; width: 29px; height: 29px; flex: none; place-items: center; border: 1px solid rgba(255,255,255,.06); border-radius: 8px; color: #a0a7b5; background: rgba(255,255,255,.025); }
+.history-marker.progress { color: #c5b9ff; border-color: rgba(169,152,255,.12); background: rgba(169,152,255,.09); }
+.history-copy { min-width: 0; flex: 1; }
+.history-copy strong { color: #dedfe7; font-size: 10px; font-weight: 600; }
+.history-copy p { overflow: hidden; margin: 3px 0 0; color: #858d9b; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.history-row time { flex: none; color: #727a89; font-size: 9px; }
 
 .connection-banner { display: flex; align-items: center; gap: 12px; margin: 0 0 23px; padding: 13px 14px; border: 1px solid rgba(239,164,109,.22); border-radius: 10px; background: rgba(239,164,109,.06); }
 .connection-banner > span { display: grid; width: 30px; height: 30px; flex: none; place-items: center; border-radius: 8px; color: #f2b482; background: rgba(239,164,109,.12); }
@@ -264,6 +276,93 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .toast-enter-active, .toast-leave-active { transition: opacity .2s, transform .2s; }
 .toast-enter-from, .toast-leave-to { opacity: 0; transform: translateY(8px); }
 
+.project-achievement-prompt { display: flex; align-items: center; gap: 12px; margin: -17px 0 30px; padding: 13px 15px; border: 1px solid rgba(211, 184, 113, .18); border-radius: 11px; background: linear-gradient(110deg, rgba(211, 184, 113, .075), rgba(169, 152, 255, .035)); }
+.project-achievement-icon, .completion-modal-icon { display: grid; width: 35px; height: 35px; flex: none; place-items: center; border-radius: 10px; color: #e7ca83; background: rgba(211, 184, 113, .12); }
+.project-achievement-prompt > div:nth-child(2) { flex: 1; }
+.project-achievement-prompt strong { color: #e4d5ac; font-size: 11px; }
+.project-achievement-prompt p { margin: 3px 0 0; color: #9590a0; font-size: 10px; line-height: 1.4; }
+.project-achievement-actions { display: flex; gap: 7px; }
+.project-achievement-actions .button { min-height: 32px; padding: 0 10px; font-size: 10px; }
+.project-achievement-actions .button:disabled { opacity: .42; cursor: not-allowed; }
+
+.achievement-mini-card { min-width: 0; padding: 11px 13px; border: 1px solid rgba(211, 184, 113, .12); border-radius: 12px; background: linear-gradient(145deg, rgba(29, 29, 40, .95), rgba(19, 23, 33, .96)); }
+.achievement-mini-head, .achievement-mini-head > span { display: flex; align-items: center; gap: 7px; }
+.achievement-mini-head { justify-content: space-between; }
+.achievement-mini-head > span { color: #e3c87d; }
+.achievement-mini-head strong { color: #d5d3de; font-size: 10px; font-weight: 600; }
+.achievement-mini-head b { color: #f0e6c9; font: 700 14px var(--font-display); }
+.achievement-mini-head .text-button { font-size: 9px; }
+.achievement-mini-rarities { display: flex; justify-content: space-between; margin: 9px 0 8px; padding: 6px 7px; border: 1px solid rgba(255,255,255,.045); border-radius: 7px; background: rgba(255,255,255,.018); }
+.achievement-mini-rarities span { display: inline-flex; align-items: center; gap: 4px; color: #9ba1ae; font-size: 9px; }
+.achievement-mini-rarities i, .rarity-count i { width: 6px; height: 6px; border-radius: 50%; background: var(--rarity-color); }
+.achievement-mini-recent > .eyebrow { font-size: 8px; letter-spacing: 1px; }
+.achievement-mini-recent p { display: flex; min-width: 0; align-items: center; gap: 6px; margin: 5px 0 0; color: #d1d0da; font-size: 9px; }
+.achievement-mini-recent p > i { display: grid; width: 20px; height: 20px; flex: none; place-items: center; border: 1px solid color-mix(in srgb, var(--rarity-color), transparent 75%); border-radius: 6px; color: var(--rarity-color); background: color-mix(in srgb, var(--rarity-color), transparent 92%); font-size: 11px; font-style: normal; }
+.achievement-mini-recent p > span { overflow: hidden; flex: 1; text-overflow: ellipsis; white-space: nowrap; }
+.achievement-mini-recent p small { flex: none; color: #747c8b; font-size: 8px; }
+.achievement-mini-recent p.achievement-mini-empty { color: #777f8e; }
+
+.rarity-bronze { --rarity-color: #ce9167; --rarity-tint: rgba(206, 145, 103, .11); --rarity-line: rgba(206, 145, 103, .24); }
+.rarity-silver { --rarity-color: #b9c3d0; --rarity-tint: rgba(185, 195, 208, .1); --rarity-line: rgba(185, 195, 208, .23); }
+.rarity-gold { --rarity-color: #e5c36a; --rarity-tint: rgba(229, 195, 106, .11); --rarity-line: rgba(229, 195, 106, .25); }
+.rarity-platinum { --rarity-color: #b5d0db; --rarity-tint: rgba(181, 208, 219, .11); --rarity-line: rgba(181, 208, 219, .25); }
+.rarity-diamond { --rarity-color: #79d9e2; --rarity-tint: rgba(121, 217, 226, .11); --rarity-line: rgba(121, 217, 226, .25); }
+.achievement-welcome { margin-bottom: 22px; }
+.achievement-overview { display: grid; grid-template-columns: minmax(220px, .78fr) minmax(0, 1.8fr); gap: 12px; margin-bottom: 33px; }
+.achievement-total-card, .rarity-counts { min-height: 76px; border: 1px solid var(--line); border-radius: 11px; background: linear-gradient(145deg, rgba(24, 29, 41, .96), rgba(19, 23, 33, .96)); }
+.achievement-total-card { display: flex; align-items: center; gap: 12px; padding: 12px 15px; }
+.achievement-total-icon { display: grid; width: 39px; height: 39px; flex: none; place-items: center; border: 1px solid var(--rarity-line); border-radius: 11px; color: #e4c46b; background: rgba(229,195,106,.1); }
+.achievement-total-card > div { display: grid; gap: 3px; }
+.achievement-total-card small { color: #8e96a4; font-size: 9px; letter-spacing: .8px; }
+.achievement-total-card strong { color: #f0eff5; font: 700 21px var(--font-display); }
+.achievement-total-card strong span { color: #777f8e; font-size: 13px; font-weight: 500; }
+.rarity-counts { display: grid; grid-template-columns: repeat(5, 1fr); align-items: center; padding: 10px; }
+.rarity-count { display: flex; align-items: center; justify-content: center; gap: 6px; color: #9aa1ae; font-size: 9px; }
+.rarity-count strong { color: var(--rarity-color); font: 650 12px var(--font-display); }
+.achievements-section { margin-top: 0; }
+.achievements-heading { align-items: flex-end; }
+.achievement-filters { display: flex; flex-wrap: wrap; gap: 5px; }
+.achievement-filters button { display: inline-flex; min-height: 29px; align-items: center; gap: 6px; padding: 0 9px; border: 1px solid rgba(255,255,255,.07); border-radius: 7px; color: #888f9e; background: rgba(255,255,255,.018); font-size: 9px; cursor: pointer; transition: border-color .15s, color .15s, background .15s; }
+.achievement-filters button::before { width: 6px; height: 6px; border-radius: 50%; background: var(--rarity-color, #939aa8); content: ''; }
+.achievement-filters button:first-child::before { display: none; }
+.achievement-filters button.selected { border-color: var(--rarity-line, rgba(169,152,255,.26)); color: var(--rarity-color, #d2c8ff); background: var(--rarity-tint, rgba(169,152,255,.1)); }
+.achievements-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.achievement-card { position: relative; display: flex; min-width: 0; min-height: 200px; flex-direction: column; overflow: hidden; padding: 15px; border: 1px solid var(--rarity-line); border-radius: 12px; background: linear-gradient(145deg, color-mix(in srgb, var(--rarity-color), #191e29 95%), #151923 65%); transition: transform .18s ease, border-color .18s ease, opacity .18s ease; }
+.achievement-card.unlocked { box-shadow: inset 0 1px 0 color-mix(in srgb, var(--rarity-color), transparent 88%); }
+.achievement-card.unlocked::after { position: absolute; top: -55px; right: -55px; width: 120px; height: 120px; border-radius: 50%; background: color-mix(in srgb, var(--rarity-color), transparent 91%); filter: blur(26px); content: ''; pointer-events: none; }
+.achievement-card:hover { transform: translateY(-2px); border-color: color-mix(in srgb, var(--rarity-color), transparent 48%); }
+.achievement-card.locked { opacity: .78; filter: saturate(.7); }
+.achievement-card-top { position: relative; z-index: 1; display: flex; align-items: center; gap: 8px; }
+.achievement-icon { display: grid; width: 40px; height: 40px; flex: none; place-items: center; border: 1px solid var(--rarity-line); border-radius: 11px; color: var(--rarity-color); background: var(--rarity-tint); font-size: 20px; }
+.rarity-badge { padding: 5px 8px; border: 1px solid var(--rarity-line); border-radius: 99px; color: var(--rarity-color); background: var(--rarity-tint); font-size: 9px; font-weight: 600; }
+.achievement-actions { display: flex; gap: 1px; margin-left: auto; }
+.achievement-actions .icon-button { width: 27px; height: 27px; }
+.achievement-card-copy { position: relative; z-index: 1; margin: 13px 0 15px; }
+.achievement-card-copy h3 { overflow: hidden; margin: 0 0 5px; color: #eeeef3; font: 650 13px var(--font-display); text-overflow: ellipsis; white-space: nowrap; }
+.achievement-card-copy p { display: -webkit-box; min-height: 29px; overflow: hidden; margin: 0; color: #8991a0; font-size: 10px; line-height: 1.5; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.achievement-card-footer { position: relative; z-index: 1; display: flex; min-height: 27px; align-items: center; gap: 8px; margin-top: auto; padding-top: 9px; border-top: 1px solid rgba(255,255,255,.06); }
+.achievement-status { display: inline-flex; align-items: center; gap: 4px; color: #8d95a3; font-size: 9px; }
+.achievement-status.reached { color: var(--rarity-color); }
+.achievement-project { overflow: hidden; max-width: 80px; color: #737c8b; font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
+.achievement-toggle { margin-left: auto; padding: 4px 6px; border: 1px solid rgba(255,255,255,.08); border-radius: 6px; color: #a7adba; background: rgba(255,255,255,.025); font-size: 8px; white-space: nowrap; cursor: pointer; }
+.achievement-toggle:hover { border-color: var(--rarity-line); color: var(--rarity-color); background: var(--rarity-tint); }
+.achievement-toggle.reached { color: #8c929d; }
+.empty-achievements { display: flex; min-height: 230px; align-items: center; justify-content: center; flex-direction: column; padding: 28px; border: 1px dashed rgba(255,255,255,.12); border-radius: 12px; text-align: center; }
+.empty-achievements h3 { margin: 0 0 6px; font: 600 14px var(--font-display); }
+.empty-achievements p { max-width: 360px; margin: 0 0 15px; color: #858c9b; font-size: 11px; line-height: 1.5; }
+.rarity-select { width: 100%; min-height: 38px; padding: 8px 10px; border: 1px solid rgba(255,255,255,.09); border-radius: 7px; color: #e7e8ed; background: #11151e; font-size: 11px; }
+.rarity-select option { color: #e7e8ed; background: #171b25; }
+.achievement-reached-control { display: flex; align-items: center; gap: 9px; color: #c9cbd4; font-size: 10px; cursor: pointer; }
+.achievement-reached-control input { width: 15px; height: 15px; accent-color: #b4a5ff; }
+.completion-modal-copy { display: grid; justify-items: center; gap: 13px; padding: 3px 2px 2px; text-align: center; }
+.completion-modal-icon { width: 54px; height: 54px; border: 1px solid rgba(229,195,106,.2); border-radius: 16px; }
+.completion-modal-copy > p { max-width: 350px; margin: 0; color: #9ba1ae; font-size: 12px; line-height: 1.55; }
+.completion-modal-copy > p strong { color: #e8e5ef; }
+.completion-actions { display: flex; width: 100%; align-items: center; justify-content: center; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+.completion-actions .text-button { width: 100%; justify-content: center; margin-top: 3px; }
+.completion-actions button:disabled { opacity: .42; cursor: not-allowed; }
+.mobile-nav { display: none; }
+
 @media (max-width: 1040px) {
   .sidebar { width: 215px; }
   .main-area { margin-left: 215px; }
@@ -271,6 +370,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   .topbar { padding-right: 30px; padding-left: 30px; }
   .overview-grid { grid-template-columns: minmax(0, 1.1fr) minmax(230px, .9fr); }
   .projects-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .achievements-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 760px) {
   .sidebar { display: none; }
@@ -283,11 +383,14 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   .today-label { font-size: 0; }
   .today-label svg { width: 17px; height: 17px; }
   .topbar-right { gap: 11px; }
+  .data-action { width: 27px; height: 27px; }
   .page-content { padding: 30px calc(20px + env(safe-area-inset-right)) calc(20px + env(safe-area-inset-bottom)) calc(20px + env(safe-area-inset-left)); }
+  .page-content { padding-bottom: calc(92px + env(safe-area-inset-bottom)); }
   .overview-grid { grid-template-columns: 1fr; }
   .progress-overview-card { min-height: 225px; }
   .stats-stack { grid-template-columns: 1fr 1fr; grid-template-rows: auto auto; }
   .focus-card { grid-column: 1 / -1; }
+  .achievement-mini-card { grid-column: 1 / -1; }
   .metric-card { padding: 11px; }
   .metric-trend { display: none; }
   .section-heading { align-items: flex-start; }
@@ -300,10 +403,23 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   .detail-heading { align-items: flex-start; flex-direction: column; }
   .detail-actions { align-self: flex-end; margin-top: -5px; }
   .page-footer { margin-top: 34px; }
+  .achievement-overview { grid-template-columns: 1fr; }
+  .achievements-heading { flex-direction: column; }
+  .achievement-filters { width: 100%; }
+  .project-achievement-prompt { align-items: flex-start; flex-wrap: wrap; }
+  .project-achievement-prompt > div:nth-child(2) { min-width: calc(100% - 50px); }
+  .project-achievement-actions { width: 100%; margin-left: 47px; }
+  .mobile-nav { position: fixed; z-index: 12; right: 0; bottom: 0; left: 0; display: grid; grid-template-columns: repeat(3, 1fr); padding: 7px calc(16px + env(safe-area-inset-right)) calc(7px + env(safe-area-inset-bottom)) calc(16px + env(safe-area-inset-left)); border-top: 1px solid rgba(255,255,255,.08); background: rgba(16, 19, 28, .96); backdrop-filter: blur(18px); }
+  .mobile-nav button { display: flex; min-height: 45px; align-items: center; justify-content: center; flex-direction: column; gap: 3px; border: 0; border-radius: 8px; color: #858d9c; background: transparent; font-size: 9px; cursor: pointer; }
+  .mobile-nav button.active { color: #d4caff; background: rgba(169,152,255,.09); }
+  .toast-message { bottom: calc(75px + env(safe-area-inset-bottom)); }
 }
 @media (max-width: 480px) {
   .page-content { padding: 25px calc(15px + env(safe-area-inset-right)) calc(18px + env(safe-area-inset-bottom)) calc(15px + env(safe-area-inset-left)); }
+  .page-content { padding-bottom: calc(88px + env(safe-area-inset-bottom)); }
   .topbar { padding-right: calc(15px + env(safe-area-inset-right)); padding-left: calc(15px + env(safe-area-inset-left)); }
+  .topbar-right { gap: 6px; }
+  .data-action { width: 25px; height: 25px; }
   .welcome-header { align-items: flex-start; flex-direction: column; gap: 15px; }
   .welcome-header h1 { font-size: 25px; }
   .create-button { align-self: stretch; }
@@ -317,6 +433,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   .metric-card small, .metric-card div > span { font-size: 8px; }
   .metric-card strong { font-size: 16px; }
   .projects-grid, .loading-grid { grid-template-columns: 1fr; }
+  .achievements-grid { grid-template-columns: 1fr; }
   .project-card { min-height: 205px; }
   .project-controls { gap: 9px; }
   .search-box kbd { display: none; }
@@ -336,4 +453,16 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   .connection-banner .button { margin-left: 42px; }
   .modal-card { padding: 19px; }
   .icon-picker { flex-wrap: wrap; }
+  .achievement-filters { gap: 4px; }
+  .achievement-filters button { min-height: 27px; padding: 0 7px; font-size: 8px; }
+  .rarity-counts { padding: 8px 5px; }
+  .rarity-count { gap: 4px; font-size: 8px; }
+  .rarity-count i { width: 5px; height: 5px; }
+  .rarity-count strong { font-size: 10px; }
+  .achievement-card { min-height: 190px; }
+  .project-achievement-actions { margin-left: 0; }
+  .project-achievement-actions .button { flex: 1; }
+  .modal-actions { flex-wrap: wrap; }
+  .modal-actions .button { flex: 1; }
+  .completion-actions .button { width: 100%; }
 }

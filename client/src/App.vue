@@ -1,36 +1,51 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue';
 import {
-  ArrowLeft, ArrowRight, BookOpen, BriefcaseBusiness, CalendarDays, Check, CheckCircle2,
-  ChevronDown, CircleHelp, Clock3, Dumbbell, FolderKanban, HeartPulse, LayoutDashboard,
-  LogOut, Plus, Search, Settings2, Sparkles, Target, Trash2, X, Plane
+  ArrowLeft, ArrowRight, ArrowUpRight, Award, BookOpen, BriefcaseBusiness, CalendarDays, Check, CheckCircle2,
+  ChevronDown, CircleHelp, Clock3, Download, Dumbbell, FolderKanban, HeartPulse, LayoutDashboard,
+  Plus, Search, Settings2, Sparkles, Target, Trash2, Trophy, Upload, X, Plane
 } from 'lucide-vue-next';
-import { api } from './api';
-import type { Project, ProjectPayload, Subarea, SubareaPayload } from './types';
+import { dataStore, initializeStorage, validateBackup } from './storage';
+import type { Achievement, AchievementPayload, AchievementRarity, HistoryRecord, Project, ProjectPayload, Subarea, SubareaPayload } from './types';
+import AchievementCard from './components/AchievementCard.vue';
 import ProjectCard from './components/ProjectCard.vue';
 import ProgressChart from './components/ProgressChart.vue';
 import ProgressRing from './components/ProgressRing.vue';
 import SubareaRow from './components/SubareaRow.vue';
 
-type ModalMode = 'project' | 'subarea' | null;
+type ModalMode = 'project' | 'subarea' | 'achievement' | 'completion' | 'link-achievement' | null;
 const projects = ref<Project[]>([]);
+const achievements = ref<Achievement[]>([]);
 const selectedProjectId = ref<number | null>(null);
-const view = ref<'overview' | 'projects'>('overview');
+const selectedHistory = ref<HistoryRecord[]>([]);
+const view = ref<'overview' | 'projects' | 'achievements'>('overview');
 const isLoading = ref(true);
-const apiError = ref('');
+const storageError = ref('');
 const toastMessage = ref('');
 const search = ref('');
 const modalMode = ref<ModalMode>(null);
 const projectEditId = ref<number | null>(null);
 const subareaEditId = ref<number | null>(null);
+const achievementEditId = ref<number | null>(null);
+const completionProjectId = ref<number | null>(null);
+const linkAchievementId = ref<number | null>(null);
+const linkMarkAchieved = ref(false);
+const achievementFilter = ref<'all' | AchievementRarity>('all');
 const savingIds = ref<Set<number>>(new Set());
-const saveTimers = new Map<number, number>();
+const progressWrites = new Map<number, number>();
+const backupInput = ref<HTMLInputElement | null>(null);
 const projectForm = reactive<ProjectPayload>({ name: '', description: '', color: '#9a8cff', icon: 'sparkles', targetDate: null });
 const areaForm = reactive<SubareaPayload>({ name: '', description: '', progress: 0, weight: 1 });
+const achievementForm = reactive<AchievementPayload>({ name: '', description: '', rarity: 'bronze', achieved: false, achievedAt: null, icon: '🏆', projectId: null });
 
 const selectedProject = computed(() => projects.value.find((project) => project.id === selectedProjectId.value) ?? null);
 const selectedProjectColor = computed(() => selectedProject.value?.color ?? '#9a8cff');
 const allAreas = computed(() => projects.value.flatMap((project) => project.subareas));
+const projectNames = computed(() => new Map(projects.value.map((project) => [project.id, project.name])));
+const achievedAchievements = computed(() => achievements.value.filter((achievement) => achievement.achieved));
+const achievedByRarity = computed(() => Object.fromEntries(rarityOptions.map((option) => [option.id, achievedAchievements.value.filter((achievement) => achievement.rarity === option.id).length])) as Record<AchievementRarity, number>);
+const recentAchievements = computed(() => [...achievedAchievements.value].sort((a, b) => (b.achievedAt ?? '').localeCompare(a.achievedAt ?? '') || b.updatedAt.localeCompare(a.updatedAt)).slice(0, 3));
+const visibleAchievements = computed(() => achievements.value.filter((achievement) => achievementFilter.value === 'all' || achievement.rarity === achievementFilter.value).sort((a, b) => Number(b.achieved) - Number(a.achieved) || (b.achievedAt ?? '').localeCompare(a.achievedAt ?? '') || a.name.localeCompare(b.name, 'de')));
 const completedAreas = computed(() => allAreas.value.filter((area) => area.progress === 100).length);
 const overallProgress = computed(() => {
   const weight = allAreas.value.reduce((sum, area) => sum + area.weight, 0);
@@ -48,6 +63,10 @@ const iconOptions = [
   { id: 'book', label: 'Buch', icon: BookOpen }, { id: 'work', label: 'Arbeit', icon: BriefcaseBusiness },
   { id: 'health', label: 'Gesundheit', icon: HeartPulse }, { id: 'travel', label: 'Reisen', icon: Plane }
 ];
+const rarityOptions: Array<{ id: AchievementRarity; label: string }> = [
+  { id: 'bronze', label: 'Bronze' }, { id: 'silver', label: 'Silber' }, { id: 'gold', label: 'Gold' },
+  { id: 'platinum', label: 'Platin' }, { id: 'diamond', label: 'Diamant' }
+];
 const selectedProjectIcon = computed(() => {
   const project = selectedProject.value;
   return iconOptions.find((option) => option.id === project?.icon)?.icon ?? Sparkles;
@@ -55,25 +74,34 @@ const selectedProjectIcon = computed(() => {
 
 async function loadProjects() {
   isLoading.value = true;
-  apiError.value = '';
+  storageError.value = '';
   try {
-    projects.value = await api.projects();
-    if (selectedProjectId.value && !projects.value.some((project) => project.id === selectedProjectId.value)) selectedProjectId.value = null;
+    projects.value = await dataStore.projects();
+    achievements.value = await dataStore.achievements();
+    if (selectedProjectId.value && !projects.value.some((project) => project.id === selectedProjectId.value)) {
+      selectedProjectId.value = null;
+      selectedHistory.value = [];
+    } else if (selectedProjectId.value) {
+      selectedHistory.value = await dataStore.historyForProject(selectedProjectId.value);
+    }
   } catch (error) {
-    apiError.value = error instanceof Error ? error.message : 'Die Verbindung zum Server ist fehlgeschlagen.';
+    storageError.value = error instanceof Error ? error.message : 'Der lokale Datenspeicher konnte nicht geöffnet werden.';
   } finally {
     isLoading.value = false;
   }
 }
 
-function openProject(project: Project) {
+async function openProject(project: Project) {
   selectedProjectId.value = project.id;
   view.value = 'projects';
+  try { selectedHistory.value = await dataStore.historyForProject(project.id); }
+  catch (error) { showToast(error instanceof Error ? error.message : 'Der Verlauf konnte nicht geladen werden.'); }
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
-function goTo(viewName: 'overview' | 'projects') {
+function goTo(viewName: 'overview' | 'projects' | 'achievements') {
   selectedProjectId.value = null;
+  selectedHistory.value = [];
   view.value = viewName;
 }
 
@@ -96,38 +124,131 @@ function resetAreaForm(area?: Subarea) {
   modalMode.value = 'subarea';
 }
 
-function closeModal() { modalMode.value = null; }
+function localDateToday(): string {
+  const date = new Date();
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+function resetAchievementForm(achievement?: Achievement, projectId: number | null = null) {
+  achievementForm.name = achievement?.name ?? '';
+  achievementForm.description = achievement?.description ?? '';
+  achievementForm.rarity = achievement?.rarity ?? 'bronze';
+  achievementForm.achieved = achievement?.achieved ?? false;
+  achievementForm.achievedAt = achievement?.achievedAt ?? null;
+  achievementForm.icon = achievement?.icon ?? '🏆';
+  achievementForm.projectId = achievement?.projectId ?? projectId;
+  achievementEditId.value = achievement?.id ?? null;
+  modalMode.value = 'achievement';
+}
+
+function closeModal() {
+  modalMode.value = null;
+  completionProjectId.value = null;
+}
 
 async function saveProject() {
+  const editing = projectEditId.value !== null;
   try {
-    if (projectEditId.value) await api.updateProject(projectEditId.value, { ...projectForm });
+    if (projectEditId.value !== null) await dataStore.updateProject(projectEditId.value, { ...projectForm });
     else {
-      const created = await api.createProject({ ...projectForm });
-      selectedProjectId.value = created.id;
+      selectedProjectId.value = await dataStore.createProject({ ...projectForm });
       view.value = 'projects';
     }
     closeModal();
     await loadProjects();
-    showToast(projectEditId.value ? 'Projekt aktualisiert' : 'Projekt erstellt');
+    showToast(editing ? 'Projekt aktualisiert' : 'Projekt erstellt');
   } catch (error) { showToast(error instanceof Error ? error.message : 'Projekt konnte nicht gespeichert werden.'); }
 }
 
 async function saveSubarea() {
   if (!selectedProject.value) return;
+  const editing = subareaEditId.value !== null;
   try {
-    if (subareaEditId.value) await api.updateSubarea(subareaEditId.value, { ...areaForm });
-    else await api.createSubarea(selectedProject.value.id, { ...areaForm });
+    if (subareaEditId.value !== null) await dataStore.updateSubarea(subareaEditId.value, { ...areaForm });
+    else await dataStore.createSubarea(selectedProject.value.id, { ...areaForm });
     closeModal();
     await loadProjects();
-    showToast(subareaEditId.value ? 'Bereich aktualisiert' : 'Bereich hinzugefügt');
+    showToast(editing ? 'Bereich aktualisiert' : 'Bereich hinzugefügt');
   } catch (error) { showToast(error instanceof Error ? error.message : 'Bereich konnte nicht gespeichert werden.'); }
+}
+
+async function saveAchievement() {
+  const editing = achievementEditId.value !== null;
+  try {
+    const payload = { ...achievementForm, name: achievementForm.name.trim(), achievedAt: achievementForm.achieved ? (achievementForm.achievedAt || localDateToday()) : null };
+    if (achievementEditId.value !== null) await dataStore.updateAchievement(achievementEditId.value, payload);
+    else await dataStore.createAchievement(payload);
+    modalMode.value = null;
+    completionProjectId.value = null;
+    await loadProjects();
+    showToast(editing ? 'Achievement aktualisiert' : 'Achievement erstellt');
+  } catch (error) { showToast(error instanceof Error ? error.message : 'Achievement konnte nicht gespeichert werden.'); }
+}
+
+async function toggleAchievement(achievement: Achievement, achieved: boolean) {
+  try {
+    await dataStore.updateAchievement(achievement.id, {
+      name: achievement.name, description: achievement.description, rarity: achievement.rarity,
+      achieved, achievedAt: achieved ? localDateToday() : null, icon: achievement.icon, projectId: achievement.projectId
+    });
+    await loadProjects();
+    showToast(achieved ? 'Achievement freigeschaltet' : 'Achievement zurückgesetzt');
+  } catch (error) { showToast(error instanceof Error ? error.message : 'Achievement konnte nicht aktualisiert werden.'); }
+}
+
+async function removeAchievement(achievement: Achievement) {
+  if (!window.confirm(`„${achievement.name}“ wirklich löschen?`)) return;
+  try {
+    await dataStore.deleteAchievement(achievement.id);
+    await loadProjects();
+    showToast('Achievement gelöscht');
+  } catch (error) { showToast(error instanceof Error ? error.message : 'Achievement konnte nicht gelöscht werden.'); }
+}
+
+function promptForProjectAchievement(projectId: number) {
+  completionProjectId.value = projectId;
+  modalMode.value = 'completion';
+}
+
+function createAchievementForProject(projectId: number | null = completionProjectId.value) {
+  resetAchievementForm(undefined, projectId);
+}
+
+function openAchievementLink(projectId: number | null = completionProjectId.value) {
+  if (projectId === null) return;
+  completionProjectId.value = projectId;
+  linkAchievementId.value = null;
+  linkMarkAchieved.value = false;
+  modalMode.value = 'link-achievement';
+}
+
+async function linkExistingAchievement() {
+  const projectId = completionProjectId.value;
+  const achievement = achievements.value.find((item) => item.id === linkAchievementId.value);
+  if (projectId === null || !achievement) { showToast('Bitte wähle ein Achievement aus.'); return; }
+  try {
+    const markAchieved = linkMarkAchieved.value && !achievement.achieved;
+    await dataStore.updateAchievement(achievement.id, {
+      name: achievement.name, description: achievement.description, rarity: achievement.rarity,
+      achieved: achievement.achieved || markAchieved,
+      achievedAt: achievement.achievedAt ?? (markAchieved ? localDateToday() : null),
+      icon: achievement.icon, projectId
+    });
+    modalMode.value = null;
+    completionProjectId.value = null;
+    await loadProjects();
+    showToast('Achievement mit Projekt verknüpft');
+  } catch (error) { showToast(error instanceof Error ? error.message : 'Achievement konnte nicht verknüpft werden.'); }
 }
 
 async function removeProject(project: Project) {
   if (!window.confirm(`„${project.name}“ und alle zugehörigen Bereiche löschen?`)) return;
   try {
-    await api.deleteProject(project.id);
-    if (selectedProjectId.value === project.id) selectedProjectId.value = null;
+    await dataStore.deleteProject(project.id);
+    if (selectedProjectId.value === project.id) {
+      selectedProjectId.value = null;
+      selectedHistory.value = [];
+    }
     await loadProjects();
     showToast('Projekt gelöscht');
   } catch (error) { showToast(error instanceof Error ? error.message : 'Projekt konnte nicht gelöscht werden.'); }
@@ -136,33 +257,105 @@ async function removeProject(project: Project) {
 async function removeArea(area: Subarea) {
   if (!window.confirm(`„${area.name}“ löschen?`)) return;
   try {
-    await api.deleteSubarea(area.id);
+    await dataStore.deleteSubarea(area.id);
     await loadProjects();
     showToast('Bereich gelöscht');
   } catch (error) { showToast(error instanceof Error ? error.message : 'Bereich konnte nicht gelöscht werden.'); }
 }
 
 function updateLocalProgress(areaId: number, progress: number) {
+  const previousProject = projects.value.find((project) => project.subareas.some((area) => area.id === areaId));
+  const previousProgress = previousProject?.progress ?? 0;
   projects.value = projects.value.map((project) => {
     const subareas = project.subareas.map((area) => area.id === areaId ? { ...area, progress } : area);
     if (!subareas.some((area) => area.id === areaId)) return project;
     const weight = subareas.reduce((sum, area) => sum + area.weight, 0);
     return { ...project, subareas, progress: weight ? Math.round(subareas.reduce((sum, area) => sum + area.progress * area.weight, 0) / weight) : 0, completedCount: subareas.filter((area) => area.progress === 100).length };
   });
+  const updatedProject = previousProject ? projects.value.find((project) => project.id === previousProject.id) : undefined;
+  const reachedCompletion = Boolean(updatedProject && previousProgress < 100 && updatedProject.progress === 100);
 
-  const oldTimer = saveTimers.get(areaId);
-  if (oldTimer) window.clearTimeout(oldTimer);
-  saveTimers.set(areaId, window.setTimeout(async () => {
-    savingIds.value = new Set([...savingIds.value, areaId]);
-    try {
-      await api.updateSubarea(areaId, { progress });
+  progressWrites.set(areaId, (progressWrites.get(areaId) ?? 0) + 1);
+  savingIds.value = new Set([...savingIds.value, areaId]);
+  void dataStore.updateSubarea(areaId, { progress }).then(async () => {
+    if (selectedProjectId.value !== null) selectedHistory.value = await dataStore.historyForProject(selectedProjectId.value);
+    if (reachedCompletion && updatedProject) promptForProjectAchievement(updatedProject.id);
+  }).catch(async (error: unknown) => {
+    await loadProjects();
+    showToast(error instanceof Error ? error.message : 'Fortschritt konnte nicht gespeichert werden.');
+  }).finally(() => {
+    const pending = (progressWrites.get(areaId) ?? 1) - 1;
+    if (pending > 0) progressWrites.set(areaId, pending);
+    else {
+      progressWrites.delete(areaId);
       savingIds.value = new Set([...savingIds.value].filter((id) => id !== areaId));
-    } catch (error) {
-      savingIds.value = new Set([...savingIds.value].filter((id) => id !== areaId));
-      await loadProjects();
-      showToast(error instanceof Error ? error.message : 'Fortschritt konnte nicht gespeichert werden.');
-    } finally { saveTimers.delete(areaId); }
-  }, 300));
+    }
+  });
+}
+
+async function exportBackup() {
+  try {
+    const backup = await dataStore.exportBackup();
+    const date = new Date().toISOString().slice(0, 10);
+    const file = new File([JSON.stringify(backup, null, 2)], `progress-planner-${date}.json`, { type: 'application/json' });
+    const share = navigator as Navigator & {
+      canShare?: (data: { files: File[] }) => boolean;
+      share?: (data: { files: File[]; title: string }) => Promise<void>;
+    };
+    if (share.share && share.canShare?.({ files: [file] })) {
+      await share.share({ files: [file], title: 'Progress Planner Sicherung' });
+    } else {
+      const url = URL.createObjectURL(file);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = file.name;
+      document.body.append(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+    showToast('JSON-Sicherung erstellt');
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') return;
+    showToast(error instanceof Error ? error.message : 'Sicherung konnte nicht erstellt werden.');
+  }
+}
+
+function chooseBackup() { backupInput.value?.click(); }
+
+async function importBackup(event: Event) {
+  const input = event.target as HTMLInputElement;
+  const file = input.files?.[0];
+  if (!file) return;
+  try {
+    const backup = validateBackup(JSON.parse(await file.text()) as unknown);
+    const shouldReplace = window.confirm(
+      `Diese Sicherung enthält ${backup.projects.length} Projekte, ${backup.subareas.length} Teilbereiche und ${backup.achievements.length} Achievements.\n\nSie ersetzt alle aktuell auf diesem iPhone gespeicherten Daten. Fortfahren?`
+    );
+    if (!shouldReplace) return;
+    const counts = await dataStore.importBackup(backup);
+    selectedProjectId.value = null;
+    selectedHistory.value = [];
+    search.value = '';
+    view.value = 'overview';
+    await loadProjects();
+    showToast(`${counts.projects} Projekte und ${counts.achievements} Achievements wiederhergestellt`);
+  } catch (error) {
+    showToast(error instanceof Error ? error.message : 'Datei konnte nicht importiert werden.');
+  } finally {
+    input.value = '';
+  }
+}
+
+function historyActionLabel(action: HistoryRecord['action']): string {
+  const labels: Record<HistoryRecord['action'], string> = {
+    project_created: 'Projekt erstellt', project_updated: 'Projekt bearbeitet', project_deleted: 'Projekt gelöscht',
+    subarea_created: 'Teilbereich hinzugefügt', subarea_updated: 'Teilbereich bearbeitet',
+    subarea_deleted: 'Teilbereich gelöscht', progress_changed: 'Fortschritt aktualisiert', backup_restored: 'Sicherung wiederhergestellt',
+    achievement_created: 'Achievement erstellt', achievement_updated: 'Achievement bearbeitet', achievement_deleted: 'Achievement gelöscht',
+    achievement_unlocked: 'Achievement erreicht', achievement_linked: 'Achievement verknüpft', achievement_unlinked: 'Achievement gelöst'
+  };
+  return labels[action];
 }
 
 let toastTimer = 0;
@@ -173,10 +366,19 @@ function showToast(message: string) {
 }
 
 function dateLabel(value: string) {
-  return new Intl.DateTimeFormat('de-DE', { day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(value));
+  const date = new Date(value.length === 10 ? `${value}T00:00:00` : value);
+  return new Intl.DateTimeFormat('de-DE', { day: 'numeric', month: 'short', year: 'numeric' }).format(date);
 }
 
-onMounted(loadProjects);
+function dateTimeLabel(value: string) {
+  return new Intl.DateTimeFormat('de-DE', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }).format(new Date(value));
+}
+
+onMounted(async () => {
+  try { await initializeStorage(); }
+  catch { /* loadProjects displays the local-storage error in the page */ }
+  await loadProjects();
+});
 </script>
 
 <template>
@@ -197,6 +399,7 @@ onMounted(loadProjects);
       <nav class="side-nav" aria-label="Hauptnavigation">
         <button :class="{ active: view === 'overview' && !selectedProject }" @click="goTo('overview')"><LayoutDashboard :size="17" /><span>Übersicht</span></button>
         <button :class="{ active: view === 'projects' }" @click="goTo('projects')"><FolderKanban :size="17" /><span>Projekte</span><span class="nav-count">{{ projects.length }}</span></button>
+        <button :class="{ active: view === 'achievements' }" @click="goTo('achievements')"><Trophy :size="17" /><span>Achievements</span><span class="nav-count">{{ achievedAchievements.length }}</span></button>
       </nav>
 
       <div class="sidebar-projects">
@@ -217,12 +420,18 @@ onMounted(loadProjects);
     <main class="main-area">
       <header class="topbar">
         <div class="mobile-brand"><span class="brand-mark"><Sparkles :size="17" /></span><b>progress<span>planner</span></b></div>
-        <div class="breadcrumbs"><span>Mein Workspace</span><ArrowRight :size="13" /><strong>{{ selectedProject?.name ?? (view === 'projects' ? 'Projekte' : 'Übersicht') }}</strong></div>
-        <div class="topbar-right"><span class="today-label"><CalendarDays :size="15" />{{ today }}</span><span class="topbar-avatar">D</span></div>
+        <div class="breadcrumbs"><span>Mein Workspace</span><ArrowRight :size="13" /><strong>{{ selectedProject?.name ?? (view === 'projects' ? 'Projekte' : view === 'achievements' ? 'Achievements' : 'Übersicht') }}</strong></div>
+        <div class="topbar-right">
+          <span class="today-label"><CalendarDays :size="15" />{{ today }}</span>
+          <button class="icon-button data-action" aria-label="Alle Daten als JSON sichern" title="JSON-Sicherung exportieren" @click="exportBackup"><Download :size="16" /></button>
+          <button class="icon-button data-action" aria-label="JSON-Sicherung importieren" title="JSON-Sicherung importieren" @click="chooseBackup"><Upload :size="16" /></button>
+          <input ref="backupInput" class="visually-hidden-input" type="file" accept="application/json,.json" aria-label="JSON-Sicherungsdatei auswählen" @change="importBackup" />
+          <span class="topbar-avatar">D</span>
+        </div>
       </header>
 
       <div class="page-content">
-        <div v-if="apiError" class="connection-banner"><span><CircleHelp :size="18" /></span><div><strong>Verbindung zur Datenbank fehlgeschlagen</strong><p>{{ apiError }} Starte die Datenbank und den API-Server, danach kannst du es erneut versuchen.</p></div><button class="button button-quiet" @click="loadProjects">Erneut versuchen</button></div>
+        <div v-if="storageError" class="connection-banner"><span><CircleHelp :size="18" /></span><div><strong>Lokaler Speicher nicht verfügbar</strong><p>{{ storageError }}</p></div><button class="button button-quiet" @click="loadProjects">Erneut versuchen</button></div>
 
         <template v-if="selectedProject">
           <div class="detail-back-row"><button class="back-button" @click="goTo('projects')"><ArrowLeft :size="16" /> Alle Projekte</button><span class="detail-created"><Clock3 :size="14" /> Erstellt am {{ dateLabel(selectedProject.createdAt) }}</span></div>
@@ -237,10 +446,39 @@ onMounted(loadProjects);
             <div class="detail-stat-card"><span class="detail-stat-label">ZIELDATUM</span><strong class="detail-stat-number date-stat">{{ selectedProject.targetDate ? dateLabel(selectedProject.targetDate) : 'Kein Datum' }}</strong><span class="detail-stat-foot">{{ selectedProject.targetDate ? 'Dein nächster Meilenstein' : 'Setze dir einen Zeitrahmen' }}</span></div>
           </section>
 
+          <section v-if="selectedProject.progress === 100" class="project-achievement-prompt">
+            <span class="project-achievement-icon"><Trophy :size="18" /></span>
+            <div><strong>Projekt abgeschlossen</strong><p>Wenn du möchtest, kannst du jetzt ein Achievement erstellen oder verknüpfen.</p></div>
+            <div class="project-achievement-actions"><button class="button button-quiet" @click="createAchievementForProject(selectedProject.id)"><Plus :size="14" /> Erstellen</button><button class="button button-quiet" @click="openAchievementLink(selectedProject.id)"><Award :size="14" /> Verknüpfen</button></div>
+          </section>
+
           <section class="areas-section">
             <div class="section-heading"><div><div class="eyebrow">DEIN WEG ZUM ZIEL</div><h2>Teilbereiche <span>{{ selectedProject.subareas.length }}</span></h2><p>Jeder Fortschritt zählt. Passe einzelne Bereiche in deinem Tempo an.</p></div><button class="button button-primary" @click="resetAreaForm()"><Plus :size="16" /> Bereich hinzufügen</button></div>
             <div v-if="selectedProject.subareas.length" class="areas-list"><SubareaRow v-for="area in selectedProject.subareas" :key="area.id" :area="area" :color="selectedProject.color" :saving="savingIds.has(area.id)" @progress="updateLocalProgress(area.id, $event)" @edit="resetAreaForm(area)" @delete="removeArea(area)" /></div>
             <div v-else class="empty-areas"><div class="empty-illustration"><Target :size="23" /></div><h3>Der Anfang ist gemacht.</h3><p>Teile dein Projekt in kleine, erreichbare Bereiche auf.</p><button class="button button-quiet" @click="resetAreaForm()"><Plus :size="15" /> Ersten Bereich hinzufügen</button></div>
+          </section>
+
+          <section v-if="selectedHistory.length" class="history-section">
+            <div class="section-heading"><div><div class="eyebrow">LOKAL GESPEICHERT</div><h2>Verlauf <span>{{ selectedHistory.length }}</span></h2><p>Änderungen an diesem Projekt, seinen Teilbereichen und verknüpften Achievements.</p></div></div>
+            <div class="history-list"><article v-for="entry in selectedHistory" :key="entry.id" class="history-row"><span class="history-marker" :class="{ progress: entry.action === 'progress_changed' }"><CheckCircle2 v-if="entry.action === 'progress_changed'" :size="15" /><Clock3 v-else :size="14" /></span><div class="history-copy"><strong>{{ historyActionLabel(entry.action) }}</strong><p>{{ entry.summary }}</p></div><time :datetime="entry.createdAt">{{ dateTimeLabel(entry.createdAt) }}</time></article></div>
+          </section>
+        </template>
+
+        <template v-else-if="view === 'achievements'">
+          <section class="welcome-header achievement-welcome">
+            <div><span class="eyebrow">DEINE PERSÖNLICHE SAMMLUNG</span><h1>Achievements</h1><p>Halte fest, was dir wichtig ist. Seltenheit und Status bestimmst du selbst.</p></div>
+            <button class="button button-primary create-button" @click="resetAchievementForm()"><Plus :size="17" /> Neues Achievement</button>
+          </section>
+
+          <section class="achievement-overview">
+            <div class="achievement-total-card"><span class="achievement-total-icon rarity-gold"><Trophy :size="19" /></span><div><small>ERREICHTE ACHIEVEMENTS</small><strong>{{ achievedAchievements.length }}<span> / {{ achievements.length }}</span></strong></div></div>
+            <div class="rarity-counts"><div v-for="rarity in rarityOptions" :key="rarity.id" class="rarity-count" :class="`rarity-${rarity.id}`"><i></i><span>{{ rarity.label }}</span><strong>{{ achievedByRarity[rarity.id] }}</strong></div></div>
+          </section>
+
+          <section class="achievements-section">
+            <div class="section-heading achievements-heading"><div><div class="eyebrow">DEINE ERFOLGE</div><h2>Sammlung <span>{{ visibleAchievements.length }}</span></h2><p>Unabhängig von Projekten oder mit einem Projekt verbunden.</p></div><div class="achievement-filters" role="group" aria-label="Nach Seltenheit filtern"><button :class="{ selected: achievementFilter === 'all' }" @click="achievementFilter = 'all'">Alle</button><button v-for="rarity in rarityOptions" :key="rarity.id" :class="[`rarity-${rarity.id}`, { selected: achievementFilter === rarity.id }]" @click="achievementFilter = rarity.id">{{ rarity.label }}</button></div></div>
+            <div v-if="visibleAchievements.length" class="achievements-grid"><AchievementCard v-for="achievement in visibleAchievements" :key="achievement.id" :achievement="achievement" :project-name="achievement.projectId ? projectNames.get(achievement.projectId) : undefined" @edit="resetAchievementForm(achievement)" @delete="removeAchievement(achievement)" @toggle="toggleAchievement(achievement, $event)" /></div>
+            <div v-else class="empty-achievements"><div class="empty-illustration"><Trophy :size="23" /></div><h3>{{ achievements.length ? 'Keine Achievements in dieser Stufe.' : 'Deine Sammlung beginnt hier.' }}</h3><p>{{ achievements.length ? 'Wähle einen anderen Filter, um weitere Erfolge zu sehen.' : 'Erstelle eigene Meilensteine und entscheide selbst, wann du sie freischaltest.' }}</p><button v-if="!achievements.length" class="button button-primary" @click="resetAchievementForm()"><Plus :size="16" /> Erstes Achievement erstellen</button></div>
           </section>
         </template>
 
@@ -260,7 +498,11 @@ onMounted(loadProjects);
               <div class="stats-stack">
                 <div class="metric-card"><span class="metric-icon violet"><FolderKanban :size="17" /></span><div><small>Aktive Projekte</small><strong>{{ projects.length }}</strong><span>{{ projects.length === 1 ? 'Ein Ziel im Fokus' : 'Ziele im Fokus' }}</span></div><span class="metric-trend"><ArrowUpRight :size="14" /></span></div>
                 <div class="metric-card"><span class="metric-icon green"><Target :size="17" /></span><div><small>Teilbereiche</small><strong>{{ allAreas.length }}</strong><span>{{ completedAreas }} erfolgreich abgeschlossen</span></div><span class="metric-trend green-trend"><Check :size="14" /></span></div>
-                <div class="focus-card"><div><span class="focus-sparkle"><Sparkles :size="16" /></span><strong>Dein Tempo. Dein Weg.</strong></div><p>Jeder kleine Schritt bringt dich deinen Zielen näher.</p></div>
+                <div class="achievement-mini-card">
+                  <div class="achievement-mini-head"><span><Trophy :size="15" /><strong>Achievements</strong><b>{{ achievedAchievements.length }}</b></span><button class="text-button" @click="goTo('achievements')">Alle <ArrowRight :size="13" /></button></div>
+                  <div class="achievement-mini-rarities"><span v-for="rarity in rarityOptions" :key="rarity.id" :class="`rarity-${rarity.id}`" :title="rarity.label"><i></i>{{ achievedByRarity[rarity.id] }}</span></div>
+                  <div class="achievement-mini-recent"><span class="eyebrow">ZULETZT ERREICHT</span><p v-for="achievement in recentAchievements.slice(0, 2)" :key="achievement.id"><i :class="`rarity-${achievement.rarity}`">{{ achievement.icon || '🏆' }}</i><span>{{ achievement.name }}</span><small>{{ achievement.achievedAt ? dateLabel(achievement.achievedAt) : '' }}</small></p><p v-if="recentAchievements.length === 0" class="achievement-mini-empty">Noch kein Achievement erreicht.</p></div>
+                </div>
               </div>
             </section>
           </template>
@@ -273,13 +515,18 @@ onMounted(loadProjects);
             <div v-else class="empty-search"><Search :size="18" /><p>Keine Projekte für „{{ search }}“ gefunden.</p><button class="text-button" @click="search = ''">Suche zurücksetzen</button></div>
           </section>
         </template>
-        <footer class="page-footer"><span>Mit Ruhe. Mit Absicht. In deinem Tempo.</span><span>Progress Planner <i>·</i> Persönlicher Workspace</span></footer>
+        <footer class="page-footer"><span>Mit Ruhe. Mit Absicht. In deinem Tempo.</span><span>Nur auf diesem iPhone gespeichert <i>·</i> JSON-Sicherung empfohlen</span></footer>
       </div>
+      <nav class="mobile-nav" aria-label="Hauptnavigation">
+        <button :class="{ active: view === 'overview' && !selectedProject }" @click="goTo('overview')"><LayoutDashboard :size="18" /><span>Übersicht</span></button>
+        <button :class="{ active: view === 'projects' || Boolean(selectedProject) }" @click="goTo('projects')"><FolderKanban :size="18" /><span>Projekte</span></button>
+        <button :class="{ active: view === 'achievements' }" @click="goTo('achievements')"><Trophy :size="18" /><span>Erfolge</span></button>
+      </nav>
     </main>
 
     <div v-if="modalMode" class="modal-backdrop" @click.self="closeModal" @keydown.esc="closeModal">
-      <section class="modal-card" role="dialog" aria-modal="true" :aria-labelledby="modalMode === 'project' ? 'project-modal-title' : 'area-modal-title'">
-        <div class="modal-header"><div><span class="eyebrow">{{ modalMode === 'project' ? (projectEditId ? 'PROJEKT BEARBEITEN' : 'NEUES ZIEL') : (subareaEditId ? 'BEREICH BEARBEITEN' : 'KLEINER SCHRITT') }}</span><h2 :id="modalMode === 'project' ? 'project-modal-title' : 'area-modal-title'">{{ modalMode === 'project' ? (projectEditId ? 'Projekt anpassen' : 'Neues Projekt') : (subareaEditId ? 'Bereich anpassen' : 'Teilbereich hinzufügen') }}</h2></div><button class="icon-button" aria-label="Schließen" @click="closeModal"><X :size="19" /></button></div>
+      <section class="modal-card" role="dialog" aria-modal="true" :aria-labelledby="modalMode === 'project' ? 'project-modal-title' : modalMode === 'subarea' ? 'area-modal-title' : modalMode === 'achievement' ? 'achievement-modal-title' : 'project-achievement-title'">
+        <div class="modal-header"><div><span class="eyebrow">{{ modalMode === 'project' ? (projectEditId ? 'PROJEKT BEARBEITEN' : 'NEUES ZIEL') : modalMode === 'subarea' ? (subareaEditId ? 'BEREICH BEARBEITEN' : 'KLEINER SCHRITT') : modalMode === 'achievement' ? (achievementEditId ? 'ACHIEVEMENT BEARBEITEN' : 'NEUER ERFOLG') : modalMode === 'completion' ? 'MEILENSTEIN ERREICHT' : 'ACHIEVEMENT VERKNÜPFEN' }}</span><h2 :id="modalMode === 'project' ? 'project-modal-title' : modalMode === 'subarea' ? 'area-modal-title' : modalMode === 'achievement' ? 'achievement-modal-title' : 'project-achievement-title'">{{ modalMode === 'project' ? (projectEditId ? 'Projekt anpassen' : 'Neues Projekt') : modalMode === 'subarea' ? (subareaEditId ? 'Bereich anpassen' : 'Teilbereich hinzufügen') : modalMode === 'achievement' ? (achievementEditId ? 'Achievement anpassen' : 'Achievement erstellen') : modalMode === 'completion' ? 'Dein Projekt ist fertig' : 'Erfolg mit Projekt verbinden' }}</h2></div><button class="icon-button" aria-label="Schließen" @click="closeModal"><X :size="19" /></button></div>
         <form v-if="modalMode === 'project'" class="modal-form" @submit.prevent="saveProject">
           <label class="form-field"><span>Projektname <b>*</b></span><input v-model="projectForm.name" required maxlength="120" placeholder="z. B. Calisthenics" autofocus /></label>
           <label class="form-field"><span>Beschreibung</span><textarea v-model="projectForm.description" rows="3" placeholder="Worum geht es bei deinem Projekt?"></textarea></label>
@@ -288,12 +535,29 @@ onMounted(loadProjects);
           <label class="form-field"><span>Zieldatum <small>optional</small></span><input v-model="projectForm.targetDate" type="date" /></label>
           <div class="modal-actions"><button type="button" class="button button-quiet" @click="closeModal">Abbrechen</button><button class="button button-primary" type="submit">{{ projectEditId ? 'Änderungen speichern' : 'Projekt erstellen' }} <ArrowRight :size="15" /></button></div>
         </form>
-        <form v-else class="modal-form" @submit.prevent="saveSubarea">
+        <form v-else-if="modalMode === 'subarea'" class="modal-form" @submit.prevent="saveSubarea">
           <label class="form-field"><span>Name des Bereichs <b>*</b></span><input v-model="areaForm.name" required maxlength="120" placeholder="z. B. Handstand" autofocus /></label>
           <label class="form-field"><span>Beschreibung</span><textarea v-model="areaForm.description" rows="3" placeholder="Was möchtest du hier erreichen?"></textarea></label>
           <label class="form-field"><span>Fortschritt <strong class="form-value">{{ areaForm.progress }}%</strong></span><input v-model.number="areaForm.progress" class="progress-slider modal-slider" type="range" min="0" max="100" step="5" :style="{ '--slider-color': selectedProject?.color ?? '#9a8cff', '--slider-progress': `${areaForm.progress}%` }" /><span class="range-hint"><span>0%</span><span>in 5-%-Schritten</span><span>100%</span></span></label>
           <label class="form-field"><span>Gewichtung</span><input v-model.number="areaForm.weight" type="number" min="0.1" step="0.1" /><small class="field-hint">Standardmäßig zählt jeder Bereich gleich viel.</small></label>
           <div class="modal-actions"><button type="button" class="button button-quiet" @click="closeModal">Abbrechen</button><button class="button button-primary" type="submit">{{ subareaEditId ? 'Änderungen speichern' : 'Bereich hinzufügen' }} <ArrowRight :size="15" /></button></div>
+        </form>
+        <form v-else-if="modalMode === 'achievement'" class="modal-form" @submit.prevent="saveAchievement">
+          <label class="form-field"><span>Name <b>*</b></span><input v-model="achievementForm.name" required maxlength="120" placeholder="z. B. Erster Halbmarathon" autofocus /></label>
+          <label class="form-field"><span>Beschreibung</span><textarea v-model="achievementForm.description" rows="3" maxlength="500" placeholder="Was macht diesen Erfolg für dich besonders?"></textarea></label>
+          <label class="form-field"><span>Seltenheitsstufe</span><select v-model="achievementForm.rarity" class="rarity-select"><option v-for="rarity in rarityOptions" :key="rarity.id" :value="rarity.id">{{ rarity.label }}</option></select></label>
+          <label class="form-field"><span>Symbol <small>optional</small></span><input v-model="achievementForm.icon" maxlength="8" placeholder="🏆" aria-label="Achievement-Symbol" /></label>
+          <label class="form-field"><span>Projekt <small>optional</small></span><select v-model="achievementForm.projectId" class="rarity-select"><option :value="null">Unabhängig von Projekten</option><option v-for="project in projects" :key="project.id" :value="project.id">{{ project.name }}</option></select></label>
+          <label class="achievement-reached-control"><input v-model="achievementForm.achieved" type="checkbox" @change="achievementForm.achievedAt = achievementForm.achieved ? (achievementForm.achievedAt || localDateToday()) : null" /><span>Dieses Achievement ist erreicht</span></label>
+          <label v-if="achievementForm.achieved" class="form-field"><span>Erreichungsdatum <b>*</b></span><input v-model="achievementForm.achievedAt" type="date" required /></label>
+          <div class="modal-actions"><button type="button" class="button button-quiet" @click="closeModal">Abbrechen</button><button class="button button-primary" type="submit">{{ achievementEditId ? 'Änderungen speichern' : 'Achievement erstellen' }} <ArrowRight :size="15" /></button></div>
+        </form>
+        <div v-else-if="modalMode === 'completion'" class="completion-modal-copy"><div class="completion-modal-icon"><Trophy :size="24" /></div><p>Du hast <strong>{{ projects.find((project) => project.id === completionProjectId)?.name }}</strong> abgeschlossen. Möchtest du diesen Erfolg in deiner Sammlung festhalten?</p><div class="completion-actions"><button class="button button-primary" @click="createAchievementForProject()"><Plus :size="15" /> Achievement erstellen</button><button class="button button-quiet" :disabled="!achievements.length" @click="openAchievementLink()"><Award :size="15" /> Vorhandenes verknüpfen</button><button class="text-button" @click="closeModal">Vielleicht später</button></div></div>
+        <form v-else class="modal-form" @submit.prevent="linkExistingAchievement">
+          <label class="form-field"><span>Achievement auswählen <b>*</b></span><select v-model.number="linkAchievementId" class="rarity-select" required><option :value="null" disabled>Bitte auswählen</option><option v-for="achievement in achievements" :key="achievement.id" :value="achievement.id">{{ achievement.name }} · {{ rarityOptions.find((rarity) => rarity.id === achievement.rarity)?.label }}{{ achievement.projectId ? ` · ${projectNames.get(achievement.projectId) ?? 'Projekt'}` : '' }}</option></select></label>
+          <label v-if="linkAchievementId && !achievements.find((achievement) => achievement.id === linkAchievementId)?.achieved" class="achievement-reached-control"><input v-model="linkMarkAchieved" type="checkbox" /><span>Bei dieser Zuordnung auch als erreicht markieren</span></label>
+          <p class="field-hint">Die bisherige Seltenheit und der Status bleiben erhalten, sofern du den Erfolg nicht ausdrücklich als erreicht markierst.</p>
+          <div class="modal-actions"><button type="button" class="button button-quiet" @click="closeModal">Abbrechen</button><button class="button button-primary" type="submit" :disabled="!linkAchievementId">Verknüpfen <ArrowRight :size="15" /></button></div>
         </form>
       </section>
     </div>

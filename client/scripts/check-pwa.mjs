@@ -64,8 +64,6 @@ if (!existsSync(serviceWorkerPath)) {
   fail('sw.js fehlt im Produktions-Build.');
 } else {
   const sw = readFileSync(serviceWorkerPath, 'utf8');
-  if (!sw.includes("url.pathname.startsWith('/api/')")) fail('Service Worker umgeht API-Aufrufe nicht.');
-  else pass('API-Aufrufe werden vom Cache ausgeschlossen.');
   if (!sw.includes("request.mode === 'navigate'") || !sw.includes('caches.match(\'/\')')) fail('Offline-Fallback für App-Navigation fehlt.');
   else pass('App-Shell kann offline geöffnet werden.');
 }
@@ -89,8 +87,27 @@ const stylesheets = assetRefs.filter((asset) => asset.endsWith('.css'));
 if (stylesheets.some((asset) => readFileSync(join(dist, asset.replace(/^\//, '')), 'utf8').includes('safe-area-inset'))) pass('Mobile Safe-Area-Abstände sind in den Styles enthalten.');
 else fail('Mobile Safe-Area-Abstände fehlen in den Styles.');
 
-if (!existsSync(join(process.cwd(), '..', 'docker-compose.production.yml')) || !existsSync(join(process.cwd(), '..', 'Caddyfile'))) fail('HTTPS-Produktionskonfiguration mit Caddy fehlt.');
-else pass('HTTPS-Produktionskonfiguration ist vorhanden.');
+const sourceFiles = ['src/App.vue', 'src/storage.ts', 'src/main.ts'].map((file) => readFileSync(join(process.cwd(), file), 'utf8'));
+if (sourceFiles.some((source) => /fetch\s*\(|\/api\//.test(source))) fail('App-Code enthält einen externen API-Aufruf.');
+else pass('App-Code enthält keine API-Aufrufe.');
+
+const appSource = sourceFiles[0];
+const storageSource = sourceFiles[1];
+if (!storageSource.includes('indexedDB.open') || !storageSource.includes("const HISTORY = 'history'")) fail('IndexedDB-Projekt- oder Verlaufspeicher fehlt.');
+else pass('Projekte und Änderungsverlauf werden in IndexedDB gespeichert.');
+if (!appSource.includes('dataStore.exportBackup()') || !appSource.includes('dataStore.importBackup(backup)')) fail('JSON-Export oder -Import fehlt.');
+else pass('JSON-Export und -Import sind in der Oberfläche verbunden.');
+if (!storageSource.includes('navigator.storage?.persist')) fail('Die App bittet den Browser nicht um persistente lokale Speicherung.');
+else pass('Persistente Speicherung wird beim Browser angefragt.');
+
+const repository = join(process.cwd(), '..');
+if (existsSync(join(repository, 'server')) || existsSync(join(repository, 'database'))) fail('Backend- oder Datenbankverzeichnis ist noch vorhanden.');
+else pass('Build ist frei von Backend und MariaDB.');
+
+const viteConfig = readFileSync(join(process.cwd(), 'vite.config.ts'), 'utf8');
+const readme = readFileSync(join(repository, 'README.md'), 'utf8');
+if (!/base:\s*'\/'/.test(viteConfig) || !readme.includes('Cloudflare Pages')) fail('Root-Pfad oder HTTPS-Hosting-Anleitung fehlt.');
+else pass('Statisches HTTPS-Hosting ist dokumentiert und für den Root-Pfad konfiguriert.');
 
 if (process.exitCode) process.exit(process.exitCode);
 console.log('PWA-Dateien und lokale Installationsvoraussetzungen sind vollständig. Öffentliches Installieren setzt eine erreichbare HTTPS-Domain voraus.');
