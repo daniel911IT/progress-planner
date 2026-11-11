@@ -18,27 +18,23 @@ npm run build
 npm run preview
 ```
 
-Vite zeigt die lokale Adresse an. `localhost` gilt als sicherer Ursprung; der Entwicklungsserver selbst registriert den Service Worker nicht, damit er während der Entwicklung keine veralteten Dateien ausliefert.
+Vite zeigt die lokale Vorschau unter `/progress-planner/` an. `localhost` gilt als sicherer Ursprung; der Entwicklungsserver selbst registriert den Service Worker nicht, damit er während der Entwicklung keine veralteten Dateien ausliefert.
 
-## Veröffentlichung als statische PWA
+## Veröffentlichung über GitHub Pages
 
-Das Projekt ist für Cloudflare Pages vorbereitet. Die Git-Integration unterstützt private GitHub-Repositories; das Repository bleibt privat. [Cloudflare Pages Git-Integration](https://developers.cloudflare.com/pages/configuration/git-integration/) · [Build-Einstellungen](https://developers.cloudflare.com/pages/configuration/build-configuration/)
+Der Workflow [.github/workflows/deploy-pages.yml](.github/workflows/deploy-pages.yml) baut die App bei jedem Push auf `main` und veröffentlicht `client/dist` über GitHub Pages. Der Produktionsbuild verwendet den Projektpfad `/progress-planner/`; Manifest, Icons, gebündelte Assets und Service Worker bleiben innerhalb dieses Pfads.
 
-1. In Cloudflare **Workers & Pages → Create application → Pages → Connect to Git** wählen und das private Progress-Planner-Repository verbinden.
-2. Build-Einstellungen setzen:
+1. Lade den Workflow auf den Branch `main` hoch.
+2. Öffne das Repository auf GitHub und gehe zu **Settings → Pages**.
+3. Stelle unter **Build and deployment → Source** die Option **GitHub Actions** ein.
+4. Prüfe unter **Actions**, ob der Lauf „Deploy Progress Planner to GitHub Pages“ erfolgreich war.
+5. Die Projektseite wird unter `https://daniel911IT.github.io/progress-planner/` erreichbar sein. Öffne sie einmal in Safari und füge sie über **Teilen → Zum Home-Bildschirm** hinzu.
 
-   - Framework preset: `Vite`
-   - Root directory: `/` (Repository-Wurzel)
-   - Build command: `npm ci && npm run build`
-   - Build output directory: `client/dist`
-   - Environment variable: `NODE_VERSION=22`
+Weitere Build-Einstellungen sind nicht nötig: Der Workflow verwendet Node.js 22, `npm ci`, `npm run build` und lädt `client/dist` als Pages-Artefakt hoch. Er benötigt keinen `gh-pages`-Branch.
 
-3. Als Produktionsbranch den Branch wählen, den du veröffentlichen möchtest, und **Save and Deploy** starten.
-4. Die fertige HTTPS-Adresse einmal in Safari auf dem iPhone öffnen und die App zum Home-Bildschirm hinzufügen.
+**Sichtbarkeit:** GitHub Pages-Websites sind grundsätzlich öffentlich erreichbar, auch wenn das Quellrepository privat ist. Private Pages-Veröffentlichung erfordert GitHub Enterprise Cloud. Im veröffentlichten App-Code befinden sich keine Nutzerdaten; Projekte, Teilbereiche, Achievements und Verlauf bleiben in IndexedDB auf dem Gerät. GitHub sieht beim Abruf der App übliche Verbindungsmetadaten. [GitHub-Dokumentation zu Pages-Veröffentlichungsquellen und Sichtbarkeit](https://docs.github.com/en/pages/getting-started-with-github-pages/configuring-a-publishing-source-for-your-github-pages-site).
 
-Vite baut mit `base: '/'` für die Root-Adresse eines Pages-Projekts oder einer eigenen Domain. Behalte dieselbe Adresse nach der ersten Nutzung bei: IndexedDB ist an genau diese Origin gebunden. Wenn du später die Domain wechselst, exportiere vorher eine Sicherung und importiere sie unter der neuen Adresse.
-
-Die Pages-Adresse ist standardmäßig über das Internet erreichbar, auch wenn das GitHub-Repository privat ist. Dort liegt ausschließlich der statische App-Code; alle Ziele bleiben in IndexedDB auf deinem iPhone. Der Hosting-Anbieter sieht trotzdem übliche Verbindungsmetadaten wie die IP-Adresse, mit der die statischen Dateien abgerufen werden. Es gibt keine API-Aufrufe, Analyse-Skripte, externen Schrift-CDNs oder Übertragung deiner Projektinhalte. Wenn auch die App-Seite selbst zugriffsbeschränkt sein soll, muss das beim Hosting separat eingerichtet werden.
+Die lokale Datenbank ist an die exakte Origin gebunden. Wenn du die Domain oder den Pfad änderst, exportiere vorher eine JSON-Sicherung und importiere sie auf der neuen Adresse.
 
 ## Auf dem iPhone installieren
 
@@ -51,9 +47,9 @@ Die App verwendet das Web App Manifest im Standalone-Modus, ein eigenes iOS-Touc
 
 ## Daten und Sicherungen
 
-- Alle Projekte, Teilbereiche und Fortschrittswerte werden lokal in IndexedDB gespeichert.
+- Projekte, Teilbereiche, Fortschrittswerte, Achievements und Änderungsverlauf werden lokal in IndexedDB gespeichert.
 - Jede Erstellung, Bearbeitung, Fortschrittsänderung und Löschung wird als Verlaufseintrag lokal festgehalten und in der Projektansicht angezeigt.
-- **Download-Symbol** exportiert einen JSON-Datenbestand mit Projekten, Teilbereichen und vollständigem Verlauf. Auf iOS öffnet sich dafür die Teilen-Ansicht.
+- **Download-Symbol** exportiert einen JSON-Datenbestand mit Projekten, Teilbereichen, Achievements und vollständigem Verlauf. Auf iOS öffnet sich dafür die Teilen-Ansicht.
 - **Upload-Symbol** importiert eine Sicherung. Der Import prüft die Daten und ersetzt danach den gesamten aktuellen lokalen Datenbestand in einer IndexedDB-Transaktion.
 - Für die einmalige Übernahme alter MariaDB-Daten öffne vor dem Abschalten des bisherigen Servers dessen `GET /api/projects`-Adresse im Browser und speichere die JSON-Antwort als Datei. Der Import akzeptiert dieses alte Array-Format und übernimmt Projekte sowie Teilbereiche. Die alte Anwendung hat keinen Änderungsverlauf gespeichert; frühere Verlaufseinträge können deshalb nicht rekonstruiert werden.
 - Updates der App ändern nur den Cache des Service Workers. Das versionierte IndexedDB-Schema wird nicht gelöscht; spätere Schemaänderungen müssen über IndexedDB-Upgrades migriert werden.
@@ -68,7 +64,7 @@ Verwende für Daten, die du behalten möchtest, den normalen Safari-Modus und en
 npm run check:pwa
 ```
 
-Der Befehl baut das Projekt und prüft Manifest, Standalone-Modus, PNG-Icon-Abmessungen, Apple-Metadaten, Service-Worker-Registrierung und Offline-Cache. Öffentliches Installieren erfordert HTTPS; Cloudflare Pages stellt die HTTPS-Adresse für das Projekt bereit.
+Der Befehl baut das Projekt und prüft Manifest, `/progress-planner/`-Pfade, Standalone-Modus, PNG-Icon-Abmessungen, Apple-Metadaten, Service-Worker-Scope und Offline-Cache. GitHub Pages stellt die HTTPS-Adresse bereit.
 
 ## Projektstruktur
 
@@ -77,4 +73,5 @@ Der Befehl baut das Projekt und prüft Manifest, Standalone-Modus, PNG-Icon-Abme
 - `client/public/manifest.webmanifest`: Name, Icons, Start-URL und Standalone-Modus
 - `client/public/sw.js`: versionierter Cache der statischen App-Dateien
 - `client/public/icons/`: PNG-App-Icons und SVG-Master
-- `client/vite.config.ts`: Vite-Build für statisches Hosting an der Origin-Wurzel
+- `client/vite.config.ts`: lokale Entwicklung an `/`, Produktionsbuild für `/progress-planner/`
+- `.github/workflows/deploy-pages.yml`: Build und automatische Veröffentlichung auf GitHub Pages
