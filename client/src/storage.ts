@@ -13,7 +13,7 @@ import type {
 } from './types';
 
 const DATABASE_NAME = 'progress-planner';
-const DATABASE_VERSION = 6;
+const DATABASE_VERSION = 7;
 const PROJECTS = 'projects';
 const SUBAREAS = 'subareas';
 const HISTORY = 'history';
@@ -57,11 +57,12 @@ function openDatabase(): Promise<IDBDatabase> {
         cursorRequest.onsuccess = () => {
           const cursor = cursorRequest.result;
           if (!cursor) return;
-          const achievement = cursor.value as Omit<Achievement, 'rarity' | 'progress'> & { rarity: string; progress?: unknown };
+          const achievement = cursor.value as Omit<Achievement, 'rarity' | 'progress' | 'inHallOfFame'> & { rarity: string; progress?: unknown; inHallOfFame?: unknown };
           const storedProgress = achievement.progress;
           const validProgress = typeof storedProgress === 'number' && Number.isInteger(storedProgress) && storedProgress >= 0 && storedProgress <= 100 && storedProgress % 5 === 0;
           const progress = achievement.achieved ? 100 : validProgress ? Math.min(storedProgress as number, 95) : 0;
-          if (achievement.rarity === 'platinum' || storedProgress !== progress) cursor.update({ ...achievement, rarity: achievement.rarity === 'platinum' ? 'ruby' : achievement.rarity, progress });
+          const inHallOfFame = typeof achievement.inHallOfFame === 'boolean' ? achievement.inHallOfFame && achievement.achieved : false;
+          if (achievement.rarity === 'platinum' || storedProgress !== progress || achievement.inHallOfFame !== inHallOfFame) cursor.update({ ...achievement, rarity: achievement.rarity === 'platinum' ? 'ruby' : achievement.rarity, progress, inHallOfFame });
           cursor.continue();
         };
       }
@@ -149,6 +150,7 @@ function validateAchievementPayload(payload: AchievementPayload): void {
   if (!achievementRarities.has(payload.rarity)) throw new Error('Bitte wähle eine gültige Seltenheitsstufe.');
   validateProgress(payload.progress);
   if (payload.achieved !== (payload.progress === 100)) throw new Error('Ein Achievement ist bei 100 % Fortschritt erreicht.');
+  if (typeof payload.inHallOfFame !== 'boolean' || (payload.inHallOfFame && !payload.achieved)) throw new Error('Nur erreichte Achievements können in die Hall of Fame aufgenommen werden.');
   if (payload.achieved !== Boolean(payload.achievedAt)) throw new Error('Status und Erreichungsdatum passen nicht zusammen.');
   if (payload.achievedAt && Number.isNaN(Date.parse(payload.achievedAt))) throw new Error('Bitte wähle ein gültiges Erreichungsdatum.');
   if (payload.projectId !== null && (!Number.isSafeInteger(payload.projectId) || payload.projectId < 1)) throw new Error('Projektverknüpfung ist ungültig.');
@@ -236,6 +238,8 @@ function normalizeAchievement(value: unknown): Achievement {
   const progress = input.progress === undefined ? (input.achieved ? 100 : 0) : Number(input.progress);
   validateProgress(progress);
   if (input.achieved !== (progress === 100)) throw new Error('Status und Fortschritt eines Achievements passen nicht zusammen.');
+  const inHallOfFame = input.inHallOfFame === undefined ? false : input.inHallOfFame;
+  if (typeof inHallOfFame !== 'boolean' || (inHallOfFame && !input.achieved)) throw new Error('Nur erreichte Achievements können in der Hall of Fame stehen.');
   const achievedAt = input.achievedAt === null || input.achievedAt === undefined || input.achievedAt === ''
     ? null
     : readDate(input.achievedAt);
@@ -247,6 +251,7 @@ function normalizeAchievement(value: unknown): Achievement {
     description: readText(input.description),
     rarity: rarity as Achievement['rarity'],
     progress,
+    inHallOfFame,
     achieved: input.achieved,
     achievedAt,
     icon: readText(input.icon),
@@ -296,12 +301,12 @@ export function validateBackup(input: unknown): RestorableBackup {
     }
     assertUniqueIds(projects, 'Projekt');
     assertUniqueIds(subareas, 'Teilbereich');
-    return { format: BACKUP_FORMAT, version: 6, exportedAt: now(), projects, subareas, history: [], achievements: [] };
+    return { format: BACKUP_FORMAT, version: 7, exportedAt: now(), projects, subareas, history: [], achievements: [] };
   }
 
   const backup = asRecord(input, 'JSON-Sicherung');
   const version = Number(backup.version);
-  if (backup.format !== BACKUP_FORMAT || ![1, 2, 3, 4, 5, 6].includes(version)) throw new Error('Dieses Sicherungsformat wird nicht unterstützt.');
+  if (backup.format !== BACKUP_FORMAT || ![1, 2, 3, 4, 5, 6, 7].includes(version)) throw new Error('Dieses Sicherungsformat wird nicht unterstützt.');
   if (!Array.isArray(backup.projects) || !Array.isArray(backup.subareas) || !Array.isArray(backup.history)) {
     throw new Error('Die Sicherung benötigt Projekte, Teilbereiche und Verlaufseinträge.');
   }
@@ -322,7 +327,7 @@ export function validateBackup(input: unknown): RestorableBackup {
 
   return {
     format: BACKUP_FORMAT,
-    version: 6,
+    version: 7,
     exportedAt: readDate(backup.exportedAt),
     projects,
     subareas,
@@ -426,7 +431,7 @@ export const dataStore = {
             icon: payload.icon.trim(),
             updatedAt: timestamp
           };
-          if (before.name === after.name && before.description === after.description && before.rarity === after.rarity && before.progress === after.progress && before.achieved === after.achieved && before.achievedAt === after.achievedAt && before.icon === after.icon && before.projectId === after.projectId) return;
+          if (before.name === after.name && before.description === after.description && before.rarity === after.rarity && before.progress === after.progress && before.inHallOfFame === after.inHallOfFame && before.achieved === after.achieved && before.achievedAt === after.achievedAt && before.icon === after.icon && before.projectId === after.projectId) return;
           achievements.put(after);
         };
         if (payload.projectId === null) {
@@ -566,7 +571,7 @@ export const dataStore = {
 
   async exportBackup(): Promise<BackupFile> {
     const records = await readAllStores();
-    return { format: BACKUP_FORMAT, version: 6, exportedAt: now(), ...records, history: [] };
+    return { format: BACKUP_FORMAT, version: 7, exportedAt: now(), ...records, history: [] };
   },
 
   async importBackup(backup: RestorableBackup): Promise<{ projects: number; subareas: number; achievements: number }> {

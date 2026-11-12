@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { computed } from 'vue';
-import { Check, Pencil, Sparkles, Trash2, Trophy } from 'lucide-vue-next';
+import { computed, ref } from 'vue';
+import { Check, MoreHorizontal, Sparkles, Trophy } from 'lucide-vue-next';
 import type { Achievement, AchievementRarity } from '../types';
 
-const props = withDefaults(defineProps<{ achievement: Achievement; projectName?: string; saving?: boolean }>(), { saving: false });
-const emit = defineEmits<{ edit: []; delete: []; toggle: [achieved: boolean]; progress: [value: number] }>();
+const props = withDefaults(defineProps<{ achievement: Achievement; projectName?: string; saving?: boolean; hallOfFame?: boolean }>(), { saving: false, hallOfFame: false });
+const emit = defineEmits<{ edit: []; delete: []; toggle: [achieved: boolean]; progress: [value: number]; hallOfFame: [included: boolean] }>();
+const menuOpen = ref(false);
 
 const rarityLabels: Record<AchievementRarity, string> = {
   bronze: 'Bronze', silver: 'Silber', gold: 'Gold', ruby: 'Rubin', diamond: 'Diamant'
@@ -22,17 +23,22 @@ function formatDate(value: string) {
 </script>
 
 <template>
-  <article class="achievement-card" :class="[`rarity-${achievement.rarity}`, { locked: !achievement.achieved, unlocked: achievement.achieved, 'hall-of-fame-card': achievement.achieved }]">
+  <article class="achievement-card" :class="[`rarity-${achievement.rarity}`, { locked: !achievement.achieved, unlocked: achievement.achieved, 'hall-of-fame-card': hallOfFame }]">
     <div class="achievement-card-top">
       <span class="achievement-icon" :aria-label="achievement.icon ? `Symbol ${achievement.icon}` : 'Achievement-Symbol'">
         <span v-if="achievement.icon">{{ achievement.icon }}</span>
         <Sparkles v-else :size="21" />
       </span>
+      <span v-if="hallOfFame" class="achievement-medal-ribbons" aria-hidden="true"><i></i><i></i></span>
       <span class="rarity-badge">{{ rarityLabels[achievement.rarity] }}</span>
-      <span v-if="achievement.achieved" class="hall-of-fame-seal" aria-label="In der Hall of Fame"><Trophy :size="14" /></span>
-      <div class="achievement-actions">
-        <button class="icon-button" :aria-label="`„${achievement.name}“ bearbeiten`" @click="emit('edit')"><Pencil :size="15" /></button>
-        <button class="icon-button danger-icon" :aria-label="`„${achievement.name}“ löschen`" @click="emit('delete')"><Trash2 :size="15" /></button>
+      <span v-if="achievement.inHallOfFame" class="hall-of-fame-seal" aria-label="In der Hall of Fame"><Trophy :size="14" /></span>
+      <div class="achievement-menu-wrap">
+        <button class="icon-button achievement-menu-trigger" :aria-label="`Menü für ${achievement.name}`" :aria-expanded="menuOpen" @click.stop="menuOpen = !menuOpen"><MoreHorizontal :size="18" /></button>
+        <div v-if="menuOpen" class="achievement-menu" @click.stop>
+          <button v-if="achievement.achieved" @click="emit('hallOfFame', !achievement.inHallOfFame); menuOpen = false">{{ achievement.inHallOfFame ? 'Aus Hall of Fame entfernen' : 'Zur Hall of Fame' }}</button>
+          <button @click="emit('edit'); menuOpen = false">Bearbeiten</button>
+          <button class="achievement-menu-danger" @click="emit('delete'); menuOpen = false">Löschen</button>
+        </div>
       </div>
     </div>
     <div class="achievement-card-copy">

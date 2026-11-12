@@ -54,6 +54,7 @@ export interface Achievement {
   description: string;
   rarity: AchievementRarity;
   progress: number;
+  inHallOfFame: boolean;
   achieved: boolean;
   achievedAt: string | null;
   icon: string;
@@ -80,7 +81,7 @@ export interface HistoryRecord extends HistoryDraft {
 
 export interface BackupFile {
   format: 'progress-planner-backup';
-  version: 6;
+  version: 7;
   exportedAt: string;
   projects: ProjectRecord[];
   subareas: Subarea[];
