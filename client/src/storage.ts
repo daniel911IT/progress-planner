@@ -5,6 +5,7 @@ import type {
   HistoryDraft,
   HistoryRecord,
   Project,
+  ProjectDifficulty,
   ProjectPayload,
   ProjectRecord,
   Subarea,
@@ -12,7 +13,7 @@ import type {
 } from './types';
 
 const DATABASE_NAME = 'progress-planner';
-const DATABASE_VERSION = 3;
+const DATABASE_VERSION = 5;
 const PROJECTS = 'projects';
 const SUBAREAS = 'subareas';
 const HISTORY = 'history';
@@ -48,6 +49,7 @@ function openDatabase(): Promise<IDBDatabase> {
         achievements.createIndex('projectId', 'projectId', { unique: false });
         achievements.createIndex('achievedAt', 'achievedAt', { unique: false });
       }
+      request.transaction?.objectStore(HISTORY).clear();
 
       const achievements = request.transaction?.objectStore(ACHIEVEMENTS);
       if (achievements) {
@@ -57,6 +59,20 @@ function openDatabase(): Promise<IDBDatabase> {
           if (!cursor) return;
           const achievement = cursor.value as Omit<Achievement, 'rarity'> & { rarity: string };
           if (achievement.rarity === 'platinum') cursor.update({ ...achievement, rarity: 'ruby' });
+          cursor.continue();
+        };
+      }
+
+      const projects = request.transaction?.objectStore(PROJECTS);
+      if (projects) {
+        const cursorRequest = projects.openCursor();
+        cursorRequest.onsuccess = () => {
+          const cursor = cursorRequest.result;
+          if (!cursor) return;
+          const project = cursor.value as Omit<ProjectRecord, 'difficulty'> & { difficulty?: unknown };
+          if (typeof project.difficulty !== 'string' || !projectDifficulties.has(project.difficulty)) {
+            cursor.update({ ...project, difficulty: 'medium' });
+          }
           cursor.continue();
         };
       }
@@ -115,26 +131,6 @@ async function readWrite(stores: string[], setup: (transaction: IDBTransaction, 
 
 function now(): string { return new Date().toISOString(); }
 
-function makeChange(
-  projectId: number | null,
-  projectName: string,
-  action: HistoryDraft['action'],
-  summary: string,
-  subareaId: number | null = null,
-  subareaName: string | null = null,
-  changes?: HistoryDraft['changes']
-): HistoryDraft {
-  return { projectId, projectName, subareaId, subareaName, action, summary, createdAt: now(), ...(changes ? { changes } : {}) };
-}
-
-function difference(before: Record<string, unknown>, after: Record<string, unknown>, fields: string[]) {
-  const changes: Record<string, { before: unknown; after: unknown }> = {};
-  for (const field of fields) {
-    if (before[field] !== after[field]) changes[field] = { before: before[field], after: after[field] };
-  }
-  return changes;
-}
-
 function validateProgress(value: number): void {
   if (!Number.isInteger(value) || value < 0 || value > 100 || value % 5 !== 0) {
     throw new Error('Fortschritt muss in 5-%-Schritten zwischen 0 und 100 liegen.');
@@ -184,17 +180,22 @@ function normalizeProject(value: unknown): ProjectRecord {
   const input = asRecord(value, 'Projekt');
   const targetDate = input.targetDate;
   if (targetDate !== undefined && targetDate !== null && typeof targetDate !== 'string') throw new Error('Ein Zieldatum in der Sicherung ist ungültig.');
+  const difficulty = input.difficulty === undefined ? 'medium' : input.difficulty;
+  if (typeof difficulty !== 'string' || !projectDifficulties.has(difficulty)) throw new Error('Ein Projekt hat eine ungültige Schwierigkeitsstufe.');
   return {
     id: readId(input.id, 'Projekt'),
     name: readName(input.name, 'Projekt'),
     description: readText(input.description),
     color: readText(input.color, '#9a8cff'),
     icon: readText(input.icon, 'sparkles'),
+    difficulty: difficulty as ProjectDifficulty,
     targetDate: targetDate ? String(targetDate) : null,
     createdAt: readDate(input.createdAt),
     updatedAt: readDate(input.updatedAt, readDate(input.createdAt))
   };
 }
+
+const projectDifficulties = new Set<string>(['very-easy', 'easy', 'medium', 'hard', 'very-hard']);
 
 function normalizeSubarea(value: unknown, projectIdOverride?: number): Subarea {
   const input = asRecord(value, 'Teilbereich');
@@ -286,11 +287,11 @@ export function validateBackup(input: unknown): RestorableBackup {
     }
     assertUniqueIds(projects, 'Projekt');
     assertUniqueIds(subareas, 'Teilbereich');
-    return { format: BACKUP_FORMAT, version: 3, exportedAt: now(), projects, subareas, history: [], achievements: [] };
+    return { format: BACKUP_FORMAT, version: 5, exportedAt: now(), projects, subareas, history: [], achievements: [] };
   }
 
   const backup = asRecord(input, 'JSON-Sicherung');
-  if (backup.format !== BACKUP_FORMAT || (backup.version !== 1 && backup.version !== 2 && backup.version !== 3)) throw new Error('Dieses Sicherungsformat wird nicht unterstützt.');
+  if (backup.format !== BACKUP_FORMAT || (backup.version !== 1 && backup.version !== 2 && backup.version !== 3 && backup.version !== 4 && backup.version !== 5)) throw new Error('Dieses Sicherungsformat wird nicht unterstützt.');
   if (!Array.isArray(backup.projects) || !Array.isArray(backup.subareas) || !Array.isArray(backup.history)) {
     throw new Error('Die Sicherung benötigt Projekte, Teilbereiche und Verlaufseinträge.');
   }
@@ -311,28 +312,27 @@ export function validateBackup(input: unknown): RestorableBackup {
 
   return {
     format: BACKUP_FORMAT,
-    version: 3,
+    version: 5,
     exportedAt: readDate(backup.exportedAt),
     projects,
     subareas,
-    history,
+    history: [],
     achievements
   };
 }
 
-async function readAllStores(): Promise<{ projects: ProjectRecord[]; subareas: Subarea[]; history: HistoryRecord[]; achievements: Achievement[] }> {
+async function readAllStores(): Promise<{ projects: ProjectRecord[]; subareas: Subarea[]; achievements: Achievement[] }> {
   const database = await openDatabase();
-  const transaction = database.transaction([PROJECTS, SUBAREAS, HISTORY, ACHIEVEMENTS], 'readonly');
+  const transaction = database.transaction([PROJECTS, SUBAREAS, ACHIEVEMENTS], 'readonly');
   const done = transactionFinished(transaction);
   const projectsRequest = transaction.objectStore(PROJECTS).getAll() as IDBRequest<ProjectRecord[]>;
   const subareasRequest = transaction.objectStore(SUBAREAS).getAll() as IDBRequest<Subarea[]>;
-  const historyRequest = transaction.objectStore(HISTORY).getAll() as IDBRequest<HistoryRecord[]>;
   const achievementsRequest = transaction.objectStore(ACHIEVEMENTS).getAll() as IDBRequest<Achievement[]>;
-  const [projects, subareas, history, achievements] = await Promise.all([
-    requestResult(projectsRequest), requestResult(subareasRequest), requestResult(historyRequest), requestResult(achievementsRequest)
+  const [projects, subareas, achievements] = await Promise.all([
+    requestResult(projectsRequest), requestResult(subareasRequest), requestResult(achievementsRequest)
   ]);
   await done;
-  return { projects, subareas, history, achievements };
+  return { projects, subareas, achievements };
 }
 
 export async function initializeStorage(): Promise<boolean> {
@@ -359,16 +359,6 @@ export const dataStore = {
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt) || b.id - a.id);
   },
 
-  async historyForProject(projectId: number): Promise<HistoryRecord[]> {
-    const database = await openDatabase();
-    const transaction = database.transaction(HISTORY, 'readonly');
-    const done = transactionFinished(transaction);
-    const request = transaction.objectStore(HISTORY).index('projectId').getAll(projectId) as IDBRequest<HistoryRecord[]>;
-    const records = await requestResult(request);
-    await done;
-    return records.sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id - a.id);
-  },
-
   async achievements(): Promise<Achievement[]> {
     const database = await openDatabase();
     const transaction = database.transaction(ACHIEVEMENTS, 'readonly');
@@ -383,8 +373,8 @@ export const dataStore = {
     validateAchievementPayload(payload);
     const timestamp = now();
     let achievementId = 0;
-    await readWrite([PROJECTS, ACHIEVEMENTS, HISTORY], (transaction, fail) => {
-      const save = (projectName: string) => {
+    await readWrite([PROJECTS, ACHIEVEMENTS], (transaction, fail) => {
+      const save = () => {
         const record: Omit<Achievement, 'id'> = {
           ...payload,
           projectId: payload.projectId,
@@ -395,20 +385,14 @@ export const dataStore = {
           updatedAt: timestamp
         };
         const request = transaction.objectStore(ACHIEVEMENTS).add(record);
-        request.onsuccess = () => {
-          achievementId = Number(request.result);
-          transaction.objectStore(HISTORY).add(makeChange(
-            payload.projectId, projectName, payload.achieved ? 'achievement_unlocked' : 'achievement_created',
-            payload.achieved ? `„${record.name}“ erreicht` : `„${record.name}“ erstellt`
-          ));
-        };
+        request.onsuccess = () => { achievementId = Number(request.result); };
       };
-      if (payload.projectId === null) { save('Achievements'); return; }
+      if (payload.projectId === null) { save(); return; }
       const projectRequest = transaction.objectStore(PROJECTS).get(payload.projectId);
       projectRequest.onsuccess = () => {
         const project = projectRequest.result as ProjectRecord | undefined;
         if (!project) { fail(new Error('Projekt nicht gefunden.')); return; }
-        save(project.name);
+        save();
       };
     });
     return achievementId;
@@ -417,13 +401,13 @@ export const dataStore = {
   async updateAchievement(id: number, payload: AchievementPayload): Promise<void> {
     validateAchievementPayload(payload);
     const timestamp = now();
-    await readWrite([PROJECTS, ACHIEVEMENTS, HISTORY], (transaction, fail) => {
+    await readWrite([PROJECTS, ACHIEVEMENTS], (transaction, fail) => {
       const achievements = transaction.objectStore(ACHIEVEMENTS);
       const achievementRequest = achievements.get(id);
       achievementRequest.onsuccess = () => {
         const before = achievementRequest.result as Achievement | undefined;
         if (!before) { fail(new Error('Achievement nicht gefunden.')); return; }
-        const save = (projectName: string) => {
+        const save = () => {
           const after: Achievement = {
             ...before,
             ...payload,
@@ -432,49 +416,31 @@ export const dataStore = {
             icon: payload.icon.trim(),
             updatedAt: timestamp
           };
-          const changes = difference(before as unknown as Record<string, unknown>, after as unknown as Record<string, unknown>, ['name', 'description', 'rarity', 'achieved', 'achievedAt', 'icon', 'projectId']);
-          if (!Object.keys(changes).length) return;
+          if (before.name === after.name && before.description === after.description && before.rarity === after.rarity && before.achieved === after.achieved && before.achievedAt === after.achievedAt && before.icon === after.icon && before.projectId === after.projectId) return;
           achievements.put(after);
-          let action: HistoryDraft['action'] = 'achievement_updated';
-          let summary = `„${after.name}“ angepasst`;
-          if (!before.achieved && after.achieved) { action = 'achievement_unlocked'; summary = `„${after.name}“ erreicht`; }
-          else if (before.projectId !== after.projectId) {
-            action = after.projectId === null ? 'achievement_unlinked' : 'achievement_linked';
-            summary = after.projectId === null ? `„${after.name}“ von einem Projekt gelöst` : `„${after.name}“ mit Projekt verknüpft`;
-          }
-          transaction.objectStore(HISTORY).add(makeChange(after.projectId ?? before.projectId, projectName, action, summary, null, null, changes));
         };
         if (payload.projectId === null) {
-          const existingProjectId = before.projectId;
-          if (existingProjectId === null) { save('Achievements'); return; }
-          const oldProjectRequest = transaction.objectStore(PROJECTS).get(existingProjectId);
-          oldProjectRequest.onsuccess = () => save((oldProjectRequest.result as ProjectRecord | undefined)?.name ?? 'Achievements');
+          save();
           return;
         }
         const projectRequest = transaction.objectStore(PROJECTS).get(payload.projectId);
         projectRequest.onsuccess = () => {
           const project = projectRequest.result as ProjectRecord | undefined;
           if (!project) { fail(new Error('Projekt nicht gefunden.')); return; }
-          save(project.name);
+        save();
         };
       };
     });
   },
 
   async deleteAchievement(id: number): Promise<void> {
-    await readWrite([PROJECTS, ACHIEVEMENTS, HISTORY], (transaction, fail) => {
+    await readWrite([ACHIEVEMENTS], (transaction, fail) => {
       const store = transaction.objectStore(ACHIEVEMENTS);
       const request = store.get(id);
       request.onsuccess = () => {
         const achievement = request.result as Achievement | undefined;
         if (!achievement) { fail(new Error('Achievement nicht gefunden.')); return; }
-        const remove = (projectName: string) => {
-          transaction.objectStore(HISTORY).add(makeChange(achievement.projectId, projectName, 'achievement_deleted', `„${achievement.name}“ gelöscht`, null, null, { achievement: { before: achievement, after: null } }));
-          store.delete(id);
-        };
-        if (achievement.projectId === null) { remove('Achievements'); return; }
-        const projectRequest = transaction.objectStore(PROJECTS).get(achievement.projectId);
-        projectRequest.onsuccess = () => remove((projectRequest.result as ProjectRecord | undefined)?.name ?? 'Achievements');
+        store.delete(id);
       };
     });
   },
@@ -482,36 +448,31 @@ export const dataStore = {
   async createProject(payload: ProjectPayload): Promise<number> {
     const timestamp = now();
     let projectId = 0;
-    await readWrite([PROJECTS, HISTORY], (transaction) => {
+    await readWrite([PROJECTS], (transaction) => {
       const record: Omit<ProjectRecord, 'id'> = { ...payload, name: payload.name.trim(), description: payload.description.trim(), createdAt: timestamp, updatedAt: timestamp };
       const request = transaction.objectStore(PROJECTS).add(record);
-      request.onsuccess = () => {
-        projectId = Number(request.result);
-        transaction.objectStore(HISTORY).add(makeChange(projectId, record.name, 'project_created', `„${record.name}“ erstellt`));
-      };
+      request.onsuccess = () => { projectId = Number(request.result); };
     });
     return projectId;
   },
 
   async updateProject(id: number, payload: ProjectPayload): Promise<void> {
     const timestamp = now();
-    await readWrite([PROJECTS, HISTORY], (transaction, fail) => {
+    await readWrite([PROJECTS], (transaction, fail) => {
       const projects = transaction.objectStore(PROJECTS);
       const request = projects.get(id);
       request.onsuccess = () => {
         const before = request.result as ProjectRecord | undefined;
         if (!before) { fail(new Error('Projekt nicht gefunden.')); return; }
         const after: ProjectRecord = { ...before, ...payload, name: payload.name.trim(), description: payload.description.trim(), updatedAt: timestamp };
-        const changes = difference(before as unknown as Record<string, unknown>, after as unknown as Record<string, unknown>, ['name', 'description', 'color', 'icon', 'targetDate']);
-        if (!Object.keys(changes).length) return;
+        if (before.name === after.name && before.description === after.description && before.color === after.color && before.icon === after.icon && before.difficulty === after.difficulty && before.targetDate === after.targetDate) return;
         projects.put(after);
-        transaction.objectStore(HISTORY).add(makeChange(id, after.name, 'project_updated', `„${after.name}“ angepasst`, null, null, changes));
       };
     });
   },
 
   async deleteProject(id: number): Promise<void> {
-    await readWrite([PROJECTS, SUBAREAS, HISTORY, ACHIEVEMENTS], (transaction, fail) => {
+    await readWrite([PROJECTS, SUBAREAS, ACHIEVEMENTS], (transaction, fail) => {
       const projects = transaction.objectStore(PROJECTS);
       const projectRequest = projects.get(id);
       projectRequest.onsuccess = () => {
@@ -520,10 +481,7 @@ export const dataStore = {
         const areas = transaction.objectStore(SUBAREAS);
         const areasRequest = areas.index('projectId').getAll(id) as IDBRequest<Subarea[]>;
         areasRequest.onsuccess = () => {
-          const history = transaction.objectStore(HISTORY);
-          history.add(makeChange(id, project.name, 'project_deleted', `„${project.name}“ gelöscht`, null, null, { project: { before: project, after: null } }));
           for (const area of areasRequest.result) {
-            history.add(makeChange(id, project.name, 'subarea_deleted', `„${area.name}“ mit Projekt gelöscht`, area.id, area.name, { subarea: { before: area, after: null } }));
             areas.delete(area.id);
           }
           const achievementStore = transaction.objectStore(ACHIEVEMENTS);
@@ -531,7 +489,6 @@ export const dataStore = {
           linkedRequest.onsuccess = () => {
             for (const achievement of linkedRequest.result) {
               achievementStore.put({ ...achievement, projectId: null, updatedAt: now() });
-              history.add(makeChange(null, 'Achievements', 'achievement_unlinked', `„${achievement.name}“ von „${project.name}“ gelöst`));
             }
           };
           projects.delete(id);
@@ -544,7 +501,7 @@ export const dataStore = {
     validateProgress(payload.progress);
     validateWeight(payload.weight);
     const timestamp = now();
-    await readWrite([PROJECTS, SUBAREAS, HISTORY], (transaction, fail) => {
+    await readWrite([PROJECTS, SUBAREAS], (transaction, fail) => {
       const projectRequest = transaction.objectStore(PROJECTS).get(projectId);
       projectRequest.onsuccess = () => {
         const project = projectRequest.result as ProjectRecord | undefined;
@@ -553,11 +510,7 @@ export const dataStore = {
           projectId, name: payload.name.trim(), description: payload.description.trim(),
           progress: payload.progress, weight: payload.weight, createdAt: timestamp, updatedAt: timestamp
         };
-        const request = transaction.objectStore(SUBAREAS).add(record);
-        request.onsuccess = () => {
-          const id = Number(request.result);
-          transaction.objectStore(HISTORY).add(makeChange(projectId, project.name, 'subarea_created', `„${record.name}“ hinzugefügt`, id, record.name));
-        };
+        transaction.objectStore(SUBAREAS).add(record);
       };
     });
   },
@@ -566,7 +519,7 @@ export const dataStore = {
     if (payload.progress !== undefined) validateProgress(payload.progress);
     if (payload.weight !== undefined) validateWeight(payload.weight);
     const timestamp = now();
-    await readWrite([PROJECTS, SUBAREAS, HISTORY], (transaction, fail) => {
+    await readWrite([PROJECTS, SUBAREAS], (transaction, fail) => {
       const areas = transaction.objectStore(SUBAREAS);
       const areaRequest = areas.get(id);
       areaRequest.onsuccess = () => {
@@ -577,22 +530,15 @@ export const dataStore = {
           const project = projectRequest.result as ProjectRecord | undefined;
           if (!project) { fail(new Error('Projekt nicht gefunden.')); return; }
           const after: Subarea = { ...before, ...payload, name: payload.name?.trim() ?? before.name, description: payload.description ?? before.description, updatedAt: timestamp };
-          const changes = difference(before as unknown as Record<string, unknown>, after as unknown as Record<string, unknown>, ['name', 'description', 'progress', 'weight']);
-          if (!Object.keys(changes).length) return;
+          if (before.name === after.name && before.description === after.description && before.progress === after.progress && before.weight === after.weight) return;
           areas.put(after);
-          const progressChanged = Object.prototype.hasOwnProperty.call(changes, 'progress');
-          const action: HistoryDraft['action'] = progressChanged ? 'progress_changed' : 'subarea_updated';
-          const summary = progressChanged
-            ? `„${after.name}“: ${before.progress} % → ${after.progress} %`
-            : `„${after.name}“ angepasst`;
-          transaction.objectStore(HISTORY).add(makeChange(project.id, project.name, action, summary, id, after.name, changes));
         };
       };
     });
   },
 
   async deleteSubarea(id: number): Promise<void> {
-    await readWrite([PROJECTS, SUBAREAS, HISTORY], (transaction, fail) => {
+    await readWrite([PROJECTS, SUBAREAS], (transaction, fail) => {
       const areas = transaction.objectStore(SUBAREAS);
       const areaRequest = areas.get(id);
       areaRequest.onsuccess = () => {
@@ -602,7 +548,6 @@ export const dataStore = {
         projectRequest.onsuccess = () => {
           const project = projectRequest.result as ProjectRecord | undefined;
           if (!project) { fail(new Error('Projekt nicht gefunden.')); return; }
-          transaction.objectStore(HISTORY).add(makeChange(project.id, project.name, 'subarea_deleted', `„${area.name}“ gelöscht`, area.id, area.name, { subarea: { before: area, after: null } }));
           areas.delete(id);
         };
       };
@@ -611,7 +556,7 @@ export const dataStore = {
 
   async exportBackup(): Promise<BackupFile> {
     const records = await readAllStores();
-    return { format: BACKUP_FORMAT, version: 3, exportedAt: now(), ...records };
+    return { format: BACKUP_FORMAT, version: 5, exportedAt: now(), ...records, history: [] };
   },
 
   async importBackup(backup: RestorableBackup): Promise<{ projects: number; subareas: number; achievements: number }> {
@@ -626,9 +571,7 @@ export const dataStore = {
       achievements.clear();
       for (const project of backup.projects) projects.put(project);
       for (const area of backup.subareas) subareas.put(area);
-      for (const entry of backup.history) history.put(entry);
       for (const achievement of backup.achievements) achievements.put(achievement);
-      history.add(makeChange(null, 'Progress Planner', 'backup_restored', `Sicherung wiederhergestellt: ${backup.projects.length} Projekte, ${backup.subareas.length} Teilbereiche und ${backup.achievements.length} Achievements`));
     });
     return { projects: backup.projects.length, subareas: backup.subareas.length, achievements: backup.achievements.length };
   }

@@ -6,7 +6,7 @@ import {
   Plus, Search, Settings2, Sparkles, Target, Trash2, Trophy, Upload, X, Plane
 } from 'lucide-vue-next';
 import { dataStore, initializeStorage, validateBackup } from './storage';
-import type { Achievement, AchievementPayload, AchievementRarity, HistoryRecord, Project, ProjectPayload, Subarea, SubareaPayload } from './types';
+import type { Achievement, AchievementPayload, AchievementRarity, Project, ProjectDifficulty, ProjectPayload, Subarea, SubareaPayload } from './types';
 import AchievementCard from './components/AchievementCard.vue';
 import ProjectCard from './components/ProjectCard.vue';
 import ProgressRing from './components/ProgressRing.vue';
@@ -16,12 +16,12 @@ type ModalMode = 'project' | 'subarea' | 'achievement' | 'completion' | 'link-ac
 const projects = ref<Project[]>([]);
 const achievements = ref<Achievement[]>([]);
 const selectedProjectId = ref<number | null>(null);
-const selectedHistory = ref<HistoryRecord[]>([]);
 const view = ref<'overview' | 'projects' | 'achievements'>('overview');
 const isLoading = ref(true);
 const storageError = ref('');
 const toastMessage = ref('');
 const search = ref('');
+const showCompletedProjects = ref(false);
 const modalMode = ref<ModalMode>(null);
 const projectEditId = ref<number | null>(null);
 const subareaEditId = ref<number | null>(null);
@@ -33,7 +33,7 @@ const achievementFilter = ref<'all' | AchievementRarity>('all');
 const savingIds = ref<Set<number>>(new Set());
 const progressWrites = new Map<number, number>();
 const backupInput = ref<HTMLInputElement | null>(null);
-const projectForm = reactive<ProjectPayload>({ name: '', description: '', color: '#9a8cff', icon: 'sparkles', targetDate: null });
+const projectForm = reactive<ProjectPayload>({ name: '', description: '', color: '#9a8cff', icon: 'sparkles', difficulty: 'medium', targetDate: null });
 const areaForm = reactive<SubareaPayload>({ name: '', description: '', progress: 0, weight: 1 });
 const achievementForm = reactive<AchievementPayload>({ name: '', description: '', rarity: 'bronze', achieved: false, achievedAt: null, icon: '🏆', projectId: null });
 
@@ -51,11 +51,15 @@ const overviewProjects = computed(() => [...projects.value].sort((a, b) => {
   if (aStatus === 0 && a.progress !== b.progress) return b.progress - a.progress;
   return b.updatedAt.localeCompare(a.updatedAt) || a.name.localeCompare(b.name, 'de');
 }));
-const visibleProjects = computed(() => {
+const activeProjects = computed(() => projects.value.filter((project) => project.progress < 100));
+const completedProjects = computed(() => projects.value.filter((project) => project.progress >= 100).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)));
+const filterProjects = (items: Project[]) => {
   const query = search.value.trim().toLocaleLowerCase('de');
-  if (!query) return projects.value;
-  return projects.value.filter((project) => `${project.name} ${project.description}`.toLocaleLowerCase('de').includes(query));
-});
+  if (!query) return items;
+  return items.filter((project) => `${project.name} ${project.description}`.toLocaleLowerCase('de').includes(query));
+};
+const visibleProjects = computed(() => filterProjects(activeProjects.value));
+const visibleCompletedProjects = computed(() => filterProjects(completedProjects.value));
 const today = new Intl.DateTimeFormat('de-DE', { weekday: 'long', day: 'numeric', month: 'long' }).format(new Date());
 const colorOptions = ['#9a8cff', '#79c7b3', '#f0a46d', '#e77e9b', '#78a8ef', '#d6bd72'];
 const iconOptions = [
@@ -67,6 +71,11 @@ const rarityOptions: Array<{ id: AchievementRarity; label: string }> = [
   { id: 'bronze', label: 'Bronze' }, { id: 'silver', label: 'Silber' }, { id: 'gold', label: 'Gold' },
   { id: 'ruby', label: 'Rubin' }, { id: 'diamond', label: 'Diamant' }
 ];
+const difficultyOptions: Array<{ id: ProjectDifficulty; label: string }> = [
+  { id: 'very-easy', label: 'Sehr leicht' }, { id: 'easy', label: 'Leicht' }, { id: 'medium', label: 'Mittel' },
+  { id: 'hard', label: 'Schwer' }, { id: 'very-hard', label: 'Sehr schwer' }
+];
+const difficultyLabels = Object.fromEntries(difficultyOptions.map((option) => [option.id, option.label])) as Record<ProjectDifficulty, string>;
 const selectedProjectIcon = computed(() => {
   const project = selectedProject.value;
   return iconOptions.find((option) => option.id === project?.icon)?.icon ?? Sparkles;
@@ -80,9 +89,6 @@ async function loadProjects() {
     achievements.value = await dataStore.achievements();
     if (selectedProjectId.value && !projects.value.some((project) => project.id === selectedProjectId.value)) {
       selectedProjectId.value = null;
-      selectedHistory.value = [];
-    } else if (selectedProjectId.value) {
-      selectedHistory.value = await dataStore.historyForProject(selectedProjectId.value);
     }
   } catch (error) {
     storageError.value = error instanceof Error ? error.message : 'Der lokale Datenspeicher konnte nicht geöffnet werden.';
@@ -94,14 +100,11 @@ async function loadProjects() {
 async function openProject(project: Project) {
   selectedProjectId.value = project.id;
   view.value = 'projects';
-  try { selectedHistory.value = await dataStore.historyForProject(project.id); }
-  catch (error) { showToast(error instanceof Error ? error.message : 'Der Verlauf konnte nicht geladen werden.'); }
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 function goTo(viewName: 'overview' | 'projects' | 'achievements') {
   selectedProjectId.value = null;
-  selectedHistory.value = [];
   view.value = viewName;
 }
 
@@ -110,6 +113,7 @@ function resetProjectForm(project?: Project) {
   projectForm.description = project?.description ?? '';
   projectForm.color = project?.color ?? '#9a8cff';
   projectForm.icon = project?.icon ?? 'sparkles';
+  projectForm.difficulty = project?.difficulty ?? 'medium';
   projectForm.targetDate = project?.targetDate ?? null;
   projectEditId.value = project?.id ?? null;
   modalMode.value = 'project';
@@ -247,7 +251,6 @@ async function removeProject(project: Project) {
     await dataStore.deleteProject(project.id);
     if (selectedProjectId.value === project.id) {
       selectedProjectId.value = null;
-      selectedHistory.value = [];
     }
     await loadProjects();
     showToast('Projekt gelöscht');
@@ -278,7 +281,6 @@ function updateLocalProgress(areaId: number, progress: number) {
   progressWrites.set(areaId, (progressWrites.get(areaId) ?? 0) + 1);
   savingIds.value = new Set([...savingIds.value, areaId]);
   void dataStore.updateSubarea(areaId, { progress }).then(async () => {
-    if (selectedProjectId.value !== null) selectedHistory.value = await dataStore.historyForProject(selectedProjectId.value);
     if (reachedCompletion && updatedProject) promptForProjectAchievement(updatedProject.id);
   }).catch(async (error: unknown) => {
     await loadProjects();
@@ -335,8 +337,8 @@ async function importBackup(event: Event) {
     if (!shouldReplace) return;
     const counts = await dataStore.importBackup(backup);
     selectedProjectId.value = null;
-    selectedHistory.value = [];
     search.value = '';
+    showCompletedProjects.value = false;
     view.value = 'overview';
     await loadProjects();
     showToast(`${counts.projects} Projekte und ${counts.achievements} Achievements wiederhergestellt`);
@@ -345,17 +347,6 @@ async function importBackup(event: Event) {
   } finally {
     input.value = '';
   }
-}
-
-function historyActionLabel(action: HistoryRecord['action']): string {
-  const labels: Record<HistoryRecord['action'], string> = {
-    project_created: 'Projekt erstellt', project_updated: 'Projekt bearbeitet', project_deleted: 'Projekt gelöscht',
-    subarea_created: 'Teilbereich hinzugefügt', subarea_updated: 'Teilbereich bearbeitet',
-    subarea_deleted: 'Teilbereich gelöscht', progress_changed: 'Fortschritt aktualisiert', backup_restored: 'Sicherung wiederhergestellt',
-    achievement_created: 'Achievement erstellt', achievement_updated: 'Achievement bearbeitet', achievement_deleted: 'Achievement gelöscht',
-    achievement_unlocked: 'Achievement erreicht', achievement_linked: 'Achievement verknüpft', achievement_unlinked: 'Achievement gelöst'
-  };
-  return labels[action];
 }
 
 let toastTimer = 0;
@@ -368,10 +359,6 @@ function showToast(message: string) {
 function dateLabel(value: string) {
   const date = new Date(value.length === 10 ? `${value}T00:00:00` : value);
   return new Intl.DateTimeFormat('de-DE', { day: 'numeric', month: 'short', year: 'numeric' }).format(date);
-}
-
-function dateTimeLabel(value: string) {
-  return new Intl.DateTimeFormat('de-DE', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }).format(new Date(value));
 }
 
 onMounted(async () => {
@@ -436,14 +423,12 @@ onMounted(async () => {
         <template v-if="selectedProject">
           <div class="detail-back-row"><button class="back-button" @click="goTo('projects')"><ArrowLeft :size="16" /> Alle Projekte</button><span class="detail-created"><Clock3 :size="14" /> Erstellt am {{ dateLabel(selectedProject.createdAt) }}</span></div>
           <section class="detail-heading">
-            <div class="detail-title-side"><div class="detail-project-icon" :style="{ backgroundColor: `${selectedProjectColor}18`, color: selectedProjectColor }"><component :is="selectedProjectIcon" :size="26" /></div><div><div class="eyebrow">PROJEKTÜBERSICHT</div><h1>{{ selectedProject.name }}</h1><p>{{ selectedProject.description || 'Ein Schritt nach dem anderen.' }}</p></div></div>
+            <div class="detail-title-side"><div class="detail-project-icon" :style="{ backgroundColor: `${selectedProjectColor}18`, color: selectedProjectColor }"><component :is="selectedProjectIcon" :size="26" /></div><div><div class="eyebrow">PROJEKTÜBERSICHT</div><h1>{{ selectedProject.name }}</h1><p>{{ selectedProject.description || 'Ein Schritt nach dem anderen.' }}</p><div class="detail-project-meta"><span class="project-difficulty-badge" :class="`difficulty-${selectedProject.difficulty}`">{{ difficultyLabels[selectedProject.difficulty] }}</span><span v-if="selectedProject.targetDate" class="detail-target-date"><CalendarDays :size="13" /> Zieldatum {{ dateLabel(selectedProject.targetDate) }}</span></div></div></div>
             <div class="detail-actions"><button class="button button-quiet" @click="resetProjectForm(selectedProject)"><Settings2 :size="15" /> Bearbeiten</button><button class="icon-button danger-icon" aria-label="Projekt löschen" @click="removeProject(selectedProject)"><Trash2 :size="16" /></button></div>
           </section>
 
           <section class="detail-summary-grid">
             <div class="detail-stat-card featured-stat"><span class="detail-stat-label">GESAMTFORTSCHRITT</span><div class="featured-stat-body"><ProgressRing :value="selectedProject.progress" :color="selectedProject.color" :size="58" :stroke="5" /><p>Dein Projekt kommt<br /><strong>{{ selectedProject.progress >= 75 ? 'richtig gut voran.' : 'Schritt für Schritt voran.' }}</strong></p></div></div>
-            <div class="detail-stat-card"><span class="detail-stat-label">TEILBEREICHE</span><strong class="detail-stat-number">{{ selectedProject.subareas.length }}</strong><span class="detail-stat-foot">{{ selectedProject.completedCount }} vollständig abgeschlossen</span></div>
-            <div class="detail-stat-card"><span class="detail-stat-label">ZIELDATUM</span><strong class="detail-stat-number date-stat">{{ selectedProject.targetDate ? dateLabel(selectedProject.targetDate) : 'Kein Datum' }}</strong><span class="detail-stat-foot">{{ selectedProject.targetDate ? 'Dein nächster Meilenstein' : 'Setze dir einen Zeitrahmen' }}</span></div>
           </section>
 
           <section v-if="selectedProject.progress === 100" class="project-achievement-prompt">
@@ -453,15 +438,11 @@ onMounted(async () => {
           </section>
 
           <section class="areas-section">
-            <div class="section-heading"><div><div class="eyebrow">DEIN WEG ZUM ZIEL</div><h2>Teilbereiche <span>{{ selectedProject.subareas.length }}</span></h2><p>Jeder Fortschritt zählt. Passe einzelne Bereiche in deinem Tempo an.</p></div><button class="button button-primary" @click="resetAreaForm()"><Plus :size="16" /> Bereich hinzufügen</button></div>
+            <div class="section-heading"><div><div class="eyebrow">DEIN WEG ZUM ZIEL</div><h2>Teilbereiche</h2><p>Jeder Fortschritt zählt. Passe einzelne Bereiche in deinem Tempo an.</p></div><button class="button button-primary" @click="resetAreaForm()"><Plus :size="16" /> Bereich hinzufügen</button></div>
             <div v-if="selectedProject.subareas.length" class="areas-list"><SubareaRow v-for="area in selectedProject.subareas" :key="area.id" :area="area" :color="selectedProject.color" :saving="savingIds.has(area.id)" @progress="updateLocalProgress(area.id, $event)" @edit="resetAreaForm(area)" @delete="removeArea(area)" /></div>
             <div v-else class="empty-areas"><div class="empty-illustration"><Target :size="23" /></div><h3>Der Anfang ist gemacht.</h3><p>Teile dein Projekt in kleine, erreichbare Bereiche auf.</p><button class="button button-quiet" @click="resetAreaForm()"><Plus :size="15" /> Ersten Bereich hinzufügen</button></div>
           </section>
 
-          <section v-if="selectedHistory.length" class="history-section">
-            <div class="section-heading"><div><div class="eyebrow">LOKAL GESPEICHERT</div><h2>Verlauf <span>{{ selectedHistory.length }}</span></h2><p>Änderungen an diesem Projekt, seinen Teilbereichen und verknüpften Achievements.</p></div></div>
-            <div class="history-list"><article v-for="entry in selectedHistory" :key="entry.id" class="history-row"><span class="history-marker" :class="{ progress: entry.action === 'progress_changed' }"><CheckCircle2 v-if="entry.action === 'progress_changed'" :size="15" /><Clock3 v-else :size="14" /></span><div class="history-copy"><strong>{{ historyActionLabel(entry.action) }}</strong><p>{{ entry.summary }}</p></div><time :datetime="entry.createdAt">{{ dateTimeLabel(entry.createdAt) }}</time></article></div>
-          </section>
         </template>
 
         <template v-else-if="view === 'achievements'">
@@ -499,11 +480,19 @@ onMounted(async () => {
             <button class="button button-primary create-button" @click="resetProjectForm()"><Plus :size="17" /> Neues Projekt</button>
           </section>
           <section class="projects-section">
-            <div class="section-heading projects-heading"><div><div class="eyebrow">ALLE ZIELE</div><h2>Deine Projekte <span>{{ projects.length }}</span></h2><p>Deine Ziele, übersichtlich an einem Ort.</p></div><div class="project-controls"><label class="search-box"><Search :size="16" /><input v-model="search" placeholder="Projekt suchen" aria-label="Projekt suchen" /><kbd>⌘ K</kbd></label></div></div>
+            <div class="section-heading projects-heading"><div><div class="eyebrow">AKTIVE ZIELE</div><h2>Deine Projekte <span>{{ activeProjects.length }}</span></h2><p>Deine offenen Ziele, übersichtlich an einem Ort.</p></div><div class="project-controls"><label class="search-box"><Search :size="16" /><input v-model="search" placeholder="Projekt suchen" aria-label="Projekt suchen" /><kbd>⌘ K</kbd></label></div></div>
             <div v-if="isLoading" class="loading-grid"><div v-for="n in 3" :key="n" class="skeleton-card"></div></div>
             <div v-else-if="visibleProjects.length" class="projects-grid"><ProjectCard v-for="project in visibleProjects" :key="project.id" :project="project" @open="openProject(project)" @edit="resetProjectForm(project)" /></div>
             <div v-else-if="projects.length === 0" class="empty-projects"><div class="empty-illustration"><FolderKanban :size="23" /></div><h3>Womit möchtest du beginnen?</h3><p>Erstelle dein erstes Projekt und mache aus einem großen Ziel kleine, machbare Schritte.</p><button class="button button-primary" @click="resetProjectForm()"><Plus :size="16" /> Erstes Projekt erstellen</button></div>
-            <div v-else class="empty-search"><Search :size="18" /><p>Keine Projekte für „{{ search }}“ gefunden.</p><button class="text-button" @click="search = ''">Suche zurücksetzen</button></div>
+            <div v-else-if="activeProjects.length" class="empty-search"><Search :size="18" /><p>Keine offenen Projekte für „{{ search }}“ gefunden.</p><button class="text-button" @click="search = ''">Suche zurücksetzen</button></div>
+            <div v-else class="empty-projects active-projects-empty"><div class="empty-illustration"><CheckCircle2 :size="23" /></div><h3>Keine offenen Projekte</h3><p>Alle Projekte sind abgeschlossen. Du findest sie unten in der separaten Übersicht.</p></div>
+          </section>
+          <section v-if="completedProjects.length" class="completed-projects-section">
+            <button class="completed-projects-toggle button button-quiet" :aria-expanded="showCompletedProjects" @click="showCompletedProjects = !showCompletedProjects"><span>{{ showCompletedProjects ? 'Abgeschlossene Projekte ausblenden' : 'Abgeschlossene Projekte anzeigen' }} <small>{{ completedProjects.length }}</small></span><ChevronDown :size="16" :class="{ rotated: showCompletedProjects }" /></button>
+            <div v-if="showCompletedProjects" class="completed-projects-content">
+              <div v-if="visibleCompletedProjects.length" class="projects-grid"><ProjectCard v-for="project in visibleCompletedProjects" :key="project.id" :project="project" @open="openProject(project)" @edit="resetProjectForm(project)" /></div>
+              <div v-else class="empty-search"><Search :size="18" /><p>Keine abgeschlossenen Projekte für „{{ search }}“ gefunden.</p><button class="text-button" @click="search = ''">Suche zurücksetzen</button></div>
+            </div>
           </section>
         </template>
         <footer class="page-footer"><span>Mit Ruhe. Mit Absicht. In deinem Tempo.</span><span>Nur auf diesem iPhone gespeichert <i>·</i> JSON-Sicherung empfohlen</span></footer>
@@ -521,6 +510,7 @@ onMounted(async () => {
         <form v-if="modalMode === 'project'" class="modal-form" @submit.prevent="saveProject">
           <label class="form-field"><span>Projektname <b>*</b></span><input v-model="projectForm.name" required maxlength="120" placeholder="z. B. Calisthenics" autofocus /></label>
           <label class="form-field"><span>Beschreibung</span><textarea v-model="projectForm.description" rows="3" placeholder="Worum geht es bei deinem Projekt?"></textarea></label>
+          <label class="form-field"><span>Schwierigkeit</span><select v-model="projectForm.difficulty" class="rarity-select"><option v-for="difficulty in difficultyOptions" :key="difficulty.id" :value="difficulty.id">{{ difficulty.label }}</option></select></label>
           <div class="form-field"><span>Symbol</span><div class="icon-picker"><button v-for="option in iconOptions" :key="option.id" type="button" :aria-label="option.label" :class="{ selected: projectForm.icon === option.id }" @click="projectForm.icon = option.id"><component :is="option.icon" :size="18" /></button></div></div>
           <div class="form-field"><span>Akzentfarbe</span><div class="color-picker"><button v-for="color in colorOptions" :key="color" type="button" :aria-label="`Farbe ${color}`" :class="{ selected: projectForm.color === color }" :style="{ backgroundColor: color }" @click="projectForm.color = color"></button></div></div>
           <label class="form-field"><span>Zieldatum <small>optional</small></span><input v-model="projectForm.targetDate" type="date" /></label>

@@ -1,13 +1,15 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { ArrowUpRight, BookOpen, BriefcaseBusiness, Dumbbell, HeartPulse, Plane, Sparkles } from 'lucide-vue-next';
-import type { Project } from '../types';
+import type { Project, ProjectDifficulty } from '../types';
 
 const props = withDefaults(defineProps<{ project: Project; layout?: 'default' | 'overview' }>(), { layout: 'default' });
 const emit = defineEmits<{ open: []; edit: [] }>();
 const icons = { sparkles: Sparkles, book: BookOpen, work: BriefcaseBusiness, fitness: Dumbbell, health: HeartPulse, travel: Plane };
 const Icon = computed(() => icons[props.project.icon as keyof typeof icons] ?? Sparkles);
 const areasLabel = computed(() => `${props.project.subareas.length} ${props.project.subareas.length === 1 ? 'Teilbereich' : 'Teilbereiche'}`);
+const difficultyLabels: Record<ProjectDifficulty, string> = { 'very-easy': 'Sehr leicht', easy: 'Leicht', medium: 'Mittel', hard: 'Schwer', 'very-hard': 'Sehr schwer' };
+const difficultyLabel = computed(() => difficultyLabels[props.project.difficulty]);
 const projectStatus = computed(() => {
   if (props.project.progress >= 100) return { key: 'completed', label: 'Abgeschlossen' };
   if (props.project.progress === 0) return { key: 'planned', label: 'Geplant' };
@@ -16,7 +18,7 @@ const projectStatus = computed(() => {
 </script>
 
 <template>
-  <article class="project-card" :class="{ 'project-card-overview': layout === 'overview', 'project-card-completed': layout === 'overview' && projectStatus.key === 'completed' }" role="button" tabindex="0" @click="emit('open')" @keydown.enter="emit('open')">
+  <article class="project-card" :class="{ 'project-card-overview': layout === 'overview', 'project-card-completed': projectStatus.key === 'completed' }" role="button" tabindex="0" @click="emit('open')" @keydown.enter="emit('open')">
     <template v-if="layout === 'overview'">
       <div class="project-overview-head">
         <div class="project-icon" :style="{ color: project.color, backgroundColor: `${project.color}18` }"><component :is="Icon" :size="19" :stroke-width="1.8" /></div>
@@ -25,7 +27,7 @@ const projectStatus = computed(() => {
       </div>
       <div class="project-overview-progress-label"><span>Gesamtfortschritt</span><strong>{{ project.progress }}<small>%</small></strong></div>
       <div class="progress-track overview-progress-track"><span :style="{ width: `${project.progress}%` }"></span></div>
-      <div class="project-overview-meta"><span>{{ areasLabel }}</span><span>{{ project.completedCount }} abgeschlossen</span></div>
+      <div class="project-overview-meta"><span class="project-difficulty-badge" :class="`difficulty-${project.difficulty}`">{{ difficultyLabel }}</span><span>{{ areasLabel }}</span><span>{{ project.completedCount }} abgeschlossen</span></div>
     </template>
 
     <template v-else>
@@ -36,6 +38,7 @@ const projectStatus = computed(() => {
       <div class="project-card-copy">
         <h3>{{ project.name }}</h3>
         <p>{{ project.description || 'Ein Schritt nach dem anderen.' }}</p>
+        <span class="project-difficulty-badge" :class="`difficulty-${project.difficulty}`">{{ difficultyLabel }}</span>
       </div>
       <div class="project-card-progress">
         <div><span>Fortschritt</span><strong>{{ project.progress }}<small>%</small></strong></div>

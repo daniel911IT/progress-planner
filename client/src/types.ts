@@ -15,6 +15,7 @@ export interface ProjectRecord {
   description: string;
   color: string;
   icon: string;
+  difficulty: ProjectDifficulty;
   targetDate: string | null;
   createdAt: string;
   updatedAt: string;
@@ -31,8 +32,11 @@ export interface ProjectPayload {
   description: string;
   color: string;
   icon: string;
+  difficulty: ProjectDifficulty;
   targetDate: string | null;
 }
+
+export type ProjectDifficulty = 'very-easy' | 'easy' | 'medium' | 'hard' | 'very-hard';
 
 export interface SubareaPayload {
   name: string;
@@ -75,7 +79,7 @@ export interface HistoryRecord extends HistoryDraft {
 
 export interface BackupFile {
   format: 'progress-planner-backup';
-  version: 3;
+  version: 5;
   exportedAt: string;
   projects: ProjectRecord[];
   subareas: Subarea[];
