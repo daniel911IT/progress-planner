@@ -13,7 +13,7 @@ import type {
 } from './types';
 
 const DATABASE_NAME = 'progress-planner';
-const DATABASE_VERSION = 5;
+const DATABASE_VERSION = 6;
 const PROJECTS = 'projects';
 const SUBAREAS = 'subareas';
 const HISTORY = 'history';
@@ -57,8 +57,11 @@ function openDatabase(): Promise<IDBDatabase> {
         cursorRequest.onsuccess = () => {
           const cursor = cursorRequest.result;
           if (!cursor) return;
-          const achievement = cursor.value as Omit<Achievement, 'rarity'> & { rarity: string };
-          if (achievement.rarity === 'platinum') cursor.update({ ...achievement, rarity: 'ruby' });
+          const achievement = cursor.value as Omit<Achievement, 'rarity' | 'progress'> & { rarity: string; progress?: unknown };
+          const storedProgress = achievement.progress;
+          const validProgress = typeof storedProgress === 'number' && Number.isInteger(storedProgress) && storedProgress >= 0 && storedProgress <= 100 && storedProgress % 5 === 0;
+          const progress = achievement.achieved ? 100 : validProgress ? Math.min(storedProgress as number, 95) : 0;
+          if (achievement.rarity === 'platinum' || storedProgress !== progress) cursor.update({ ...achievement, rarity: achievement.rarity === 'platinum' ? 'ruby' : achievement.rarity, progress });
           cursor.continue();
         };
       }
@@ -144,6 +147,8 @@ function validateWeight(value: number): void {
 function validateAchievementPayload(payload: AchievementPayload): void {
   if (!payload.name.trim()) throw new Error('Ein Achievement benötigt einen Namen.');
   if (!achievementRarities.has(payload.rarity)) throw new Error('Bitte wähle eine gültige Seltenheitsstufe.');
+  validateProgress(payload.progress);
+  if (payload.achieved !== (payload.progress === 100)) throw new Error('Ein Achievement ist bei 100 % Fortschritt erreicht.');
   if (payload.achieved !== Boolean(payload.achievedAt)) throw new Error('Status und Erreichungsdatum passen nicht zusammen.');
   if (payload.achievedAt && Number.isNaN(Date.parse(payload.achievedAt))) throw new Error('Bitte wähle ein gültiges Erreichungsdatum.');
   if (payload.projectId !== null && (!Number.isSafeInteger(payload.projectId) || payload.projectId < 1)) throw new Error('Projektverknüpfung ist ungültig.');
@@ -228,6 +233,9 @@ function normalizeAchievement(value: unknown): Achievement {
   const rarity = input.rarity === 'platinum' ? 'ruby' : input.rarity;
   if (typeof rarity !== 'string' || !achievementRarities.has(rarity)) throw new Error('Ein Achievement hat eine ungültige Seltenheitsstufe.');
   if (typeof input.achieved !== 'boolean') throw new Error('Der Status eines Achievements ist ungültig.');
+  const progress = input.progress === undefined ? (input.achieved ? 100 : 0) : Number(input.progress);
+  validateProgress(progress);
+  if (input.achieved !== (progress === 100)) throw new Error('Status und Fortschritt eines Achievements passen nicht zusammen.');
   const achievedAt = input.achievedAt === null || input.achievedAt === undefined || input.achievedAt === ''
     ? null
     : readDate(input.achievedAt);
@@ -238,6 +246,7 @@ function normalizeAchievement(value: unknown): Achievement {
     name: readName(input.name, 'Achievement'),
     description: readText(input.description),
     rarity: rarity as Achievement['rarity'],
+    progress,
     achieved: input.achieved,
     achievedAt,
     icon: readText(input.icon),
@@ -287,20 +296,21 @@ export function validateBackup(input: unknown): RestorableBackup {
     }
     assertUniqueIds(projects, 'Projekt');
     assertUniqueIds(subareas, 'Teilbereich');
-    return { format: BACKUP_FORMAT, version: 5, exportedAt: now(), projects, subareas, history: [], achievements: [] };
+    return { format: BACKUP_FORMAT, version: 6, exportedAt: now(), projects, subareas, history: [], achievements: [] };
   }
 
   const backup = asRecord(input, 'JSON-Sicherung');
-  if (backup.format !== BACKUP_FORMAT || (backup.version !== 1 && backup.version !== 2 && backup.version !== 3 && backup.version !== 4 && backup.version !== 5)) throw new Error('Dieses Sicherungsformat wird nicht unterstützt.');
+  const version = Number(backup.version);
+  if (backup.format !== BACKUP_FORMAT || ![1, 2, 3, 4, 5, 6].includes(version)) throw new Error('Dieses Sicherungsformat wird nicht unterstützt.');
   if (!Array.isArray(backup.projects) || !Array.isArray(backup.subareas) || !Array.isArray(backup.history)) {
     throw new Error('Die Sicherung benötigt Projekte, Teilbereiche und Verlaufseinträge.');
   }
-  if (backup.version >= 2 && !Array.isArray(backup.achievements)) throw new Error('Die Sicherung benötigt eine Achievement-Liste.');
+  if (version >= 2 && !Array.isArray(backup.achievements)) throw new Error('Die Sicherung benötigt eine Achievement-Liste.');
 
   const projects = backup.projects.map(normalizeProject);
   const subareas = backup.subareas.map((area) => normalizeSubarea(area));
   const history = backup.history.map(normalizeHistory);
-  const achievements = backup.version >= 2 ? (backup.achievements as unknown[]).map(normalizeAchievement) : [];
+  const achievements = version >= 2 ? (backup.achievements as unknown[]).map(normalizeAchievement) : [];
   assertUniqueIds(projects, 'Projekt');
   assertUniqueIds(subareas, 'Teilbereich');
   assertUniqueIds(achievements, 'Achievement');
@@ -312,7 +322,7 @@ export function validateBackup(input: unknown): RestorableBackup {
 
   return {
     format: BACKUP_FORMAT,
-    version: 5,
+    version: 6,
     exportedAt: readDate(backup.exportedAt),
     projects,
     subareas,
@@ -416,7 +426,7 @@ export const dataStore = {
             icon: payload.icon.trim(),
             updatedAt: timestamp
           };
-          if (before.name === after.name && before.description === after.description && before.rarity === after.rarity && before.achieved === after.achieved && before.achievedAt === after.achievedAt && before.icon === after.icon && before.projectId === after.projectId) return;
+          if (before.name === after.name && before.description === after.description && before.rarity === after.rarity && before.progress === after.progress && before.achieved === after.achieved && before.achievedAt === after.achievedAt && before.icon === after.icon && before.projectId === after.projectId) return;
           achievements.put(after);
         };
         if (payload.projectId === null) {
@@ -556,7 +566,7 @@ export const dataStore = {
 
   async exportBackup(): Promise<BackupFile> {
     const records = await readAllStores();
-    return { format: BACKUP_FORMAT, version: 5, exportedAt: now(), ...records, history: [] };
+    return { format: BACKUP_FORMAT, version: 6, exportedAt: now(), ...records, history: [] };
   },
 
   async importBackup(backup: RestorableBackup): Promise<{ projects: number; subareas: number; achievements: number }> {

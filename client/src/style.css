@@ -332,15 +332,18 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .rarity-ruby { --rarity-color: #ff5969; --rarity-tint: rgba(132, 19, 38, .2); --rarity-line: rgba(226, 55, 76, .34); }
 .rarity-diamond { --rarity-color: #79d9e2; --rarity-tint: rgba(121, 217, 226, .11); --rarity-line: rgba(121, 217, 226, .25); }
 .achievement-welcome { margin-bottom: 22px; }
-.achievement-overview { display: grid; grid-template-columns: minmax(220px, .78fr) minmax(0, 1.8fr); gap: 12px; margin-bottom: 33px; }
-.achievement-total-card, .rarity-counts { min-height: 76px; border: 1px solid var(--line); border-radius: 11px; background: linear-gradient(145deg, rgba(24, 29, 41, .96), rgba(19, 23, 33, .96)); }
-.achievement-total-card { display: flex; align-items: center; gap: 12px; padding: 12px 15px; }
-.achievement-total-icon { display: grid; width: 39px; height: 39px; flex: none; place-items: center; border: 1px solid var(--rarity-line); border-radius: 11px; color: #e4c46b; background: rgba(229,195,106,.1); }
-.achievement-total-card > div { display: grid; gap: 3px; }
-.achievement-total-card small { color: #8e96a4; font-size: 9px; letter-spacing: .8px; }
-.achievement-total-card strong { color: #f0eff5; font: 700 21px var(--font-display); }
-.achievement-total-card strong span { color: #777f8e; font-size: 13px; font-weight: 500; }
-.rarity-counts { display: grid; grid-template-columns: repeat(5, 1fr); align-items: center; padding: 10px; }
+.hall-of-fame-banner { position: relative; display: flex; min-height: 123px; align-items: center; gap: 17px; overflow: hidden; margin: 0 0 13px; padding: 20px 23px; border: 1px solid rgba(229,195,106,.17); border-radius: 14px; background: radial-gradient(circle at 10% 50%, rgba(229,195,106,.12), transparent 36%), linear-gradient(120deg, #1c202b, #151923 70%); }
+.hall-of-fame-banner::after { position: absolute; right: 16%; bottom: -88px; width: 180px; height: 150px; border-radius: 50%; background: rgba(229,195,106,.07); filter: blur(34px); content: ''; pointer-events: none; }
+.hall-of-fame-crest, .hall-empty-crest { position: relative; z-index: 1; display: grid; width: 58px; height: 58px; flex: none; place-items: center; border: 1px solid rgba(229,195,106,.28); border-radius: 18px; color: #e7c76f; background: linear-gradient(145deg, rgba(229,195,106,.17), rgba(229,195,106,.045)); box-shadow: 0 8px 22px rgba(229,195,106,.08), inset 0 1px 0 rgba(255,255,255,.08); }
+.hall-of-fame-banner-copy { position: relative; z-index: 1; }
+.hall-of-fame-banner-copy .eyebrow { color: #c4aa60; }
+.hall-of-fame-banner-copy h2 { margin: 5px 0 4px; color: #f0edf0; font: 700 18px var(--font-display); letter-spacing: -.5px; }
+.hall-of-fame-banner-copy p { margin: 0; color: #8c929d; font-size: 10px; }
+.hall-of-fame-total { position: relative; z-index: 1; display: grid; justify-items: end; gap: 1px; margin-left: auto; }
+.hall-of-fame-total strong { color: #e9cc79; font: 700 34px/.95 var(--font-display); letter-spacing: -1.3px; }
+.hall-of-fame-total span { color: #9298a5; font-size: 9px; }
+.achievement-overview { margin-bottom: 31px; }
+.rarity-counts { display: grid; min-height: 65px; grid-template-columns: repeat(5, minmax(0, 1fr)); align-items: center; padding: 9px 8px; border: 1px solid var(--line); border-radius: 11px; background: linear-gradient(145deg, rgba(24, 29, 41, .96), rgba(19, 23, 33, .96)); }
 .rarity-count { display: flex; align-items: center; justify-content: center; gap: 6px; color: #9aa1ae; font-size: 9px; }
 .rarity-count strong { color: var(--rarity-color); font: 650 12px var(--font-display); }
 .achievements-section { margin-top: 0; }
@@ -351,19 +354,31 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .achievement-filters button:first-child::before { display: none; }
 .achievement-filters button.selected { border-color: var(--rarity-line, rgba(169,152,255,.26)); color: var(--rarity-color, #d2c8ff); background: var(--rarity-tint, rgba(169,152,255,.1)); }
 .achievements-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
-.achievement-card { position: relative; display: flex; min-width: 0; min-height: 200px; flex-direction: column; overflow: hidden; padding: 15px; border: 1px solid var(--rarity-line); border-radius: 12px; background: linear-gradient(145deg, color-mix(in srgb, var(--rarity-color), #191e29 95%), #151923 65%); transition: transform .18s ease, border-color .18s ease, opacity .18s ease; }
+.hall-of-fame-grid { min-height: 70px; }
+.achievement-card { position: relative; display: flex; min-width: 0; min-height: 218px; flex-direction: column; overflow: hidden; padding: 15px; border: 1px solid var(--rarity-line); border-radius: 12px; background: linear-gradient(145deg, color-mix(in srgb, var(--rarity-color), #191e29 95%), #151923 65%); transition: transform .18s ease, border-color .18s ease, opacity .18s ease; }
 .achievement-card.unlocked { box-shadow: inset 0 1px 0 color-mix(in srgb, var(--rarity-color), transparent 88%); }
 .achievement-card.unlocked::after { position: absolute; top: -55px; right: -55px; width: 120px; height: 120px; border-radius: 50%; background: color-mix(in srgb, var(--rarity-color), transparent 91%); filter: blur(26px); content: ''; pointer-events: none; }
+.achievement-card.hall-of-fame-card { min-height: 214px; box-shadow: 0 10px 27px color-mix(in srgb, var(--rarity-color), transparent 94%), inset 0 1px 0 color-mix(in srgb, var(--rarity-color), transparent 84%); }
+.achievement-card.hall-of-fame-card::after { width: 155px; height: 155px; opacity: .8; }
 .achievement-card:hover { transform: translateY(-2px); border-color: color-mix(in srgb, var(--rarity-color), transparent 48%); }
 .achievement-card.locked { opacity: .78; filter: saturate(.7); }
 .achievement-card-top { position: relative; z-index: 1; display: flex; align-items: center; gap: 8px; }
 .achievement-icon { display: grid; width: 40px; height: 40px; flex: none; place-items: center; border: 1px solid var(--rarity-line); border-radius: 11px; color: var(--rarity-color); background: var(--rarity-tint); font-size: 20px; }
+.hall-of-fame-card .achievement-icon { width: 46px; height: 46px; border-radius: 14px; font-size: 24px; }
 .rarity-badge { padding: 5px 8px; border: 1px solid var(--rarity-line); border-radius: 99px; color: var(--rarity-color); background: var(--rarity-tint); font-size: 9px; font-weight: 600; }
+.hall-of-fame-seal { display: grid; width: 25px; height: 25px; place-items: center; border: 1px solid var(--rarity-line); border-radius: 8px; color: var(--rarity-color); background: var(--rarity-tint); }
 .achievement-actions { display: flex; gap: 1px; margin-left: auto; }
 .achievement-actions .icon-button { width: 27px; height: 27px; }
 .achievement-card-copy { position: relative; z-index: 1; margin: 13px 0 15px; }
 .achievement-card-copy h3 { overflow: hidden; margin: 0 0 5px; color: #eeeef3; font: 650 13px var(--font-display); text-overflow: ellipsis; white-space: nowrap; }
 .achievement-card-copy p { display: -webkit-box; min-height: 29px; overflow: hidden; margin: 0; color: #8991a0; font-size: 10px; line-height: 1.5; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.achievement-hall-earned { position: relative; z-index: 1; display: flex; align-items: center; gap: 6px; margin: 0 0 8px; color: var(--rarity-color); font-size: 9px; }
+.achievement-progress { position: relative; z-index: 1; margin: 0 0 8px; }
+.achievement-progress-heading { display: flex; align-items: center; justify-content: space-between; color: #a0a6b3; font-size: 9px; }
+.achievement-progress-heading strong { color: var(--rarity-color); font: 700 14px var(--font-display); }
+.achievement-progress-heading small { margin-left: 1px; font-size: 9px; font-weight: 500; }
+.achievement-progress-slider { margin-top: 8px; --slider-color: var(--rarity-color); }
+.achievement-progress-hint { display: flex; justify-content: space-between; color: #646c7a; font-size: 8px; }
 .achievement-card-footer { position: relative; z-index: 1; display: flex; min-height: 27px; align-items: center; gap: 8px; margin-top: auto; padding-top: 9px; border-top: 1px solid rgba(255,255,255,.06); }
 .achievement-status { display: inline-flex; align-items: center; gap: 4px; color: #8d95a3; font-size: 9px; }
 .achievement-status.reached { color: var(--rarity-color); }
@@ -371,6 +386,19 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .achievement-toggle { margin-left: auto; padding: 4px 6px; border: 1px solid rgba(255,255,255,.08); border-radius: 6px; color: #a7adba; background: rgba(255,255,255,.025); font-size: 8px; white-space: nowrap; cursor: pointer; }
 .achievement-toggle:hover { border-color: var(--rarity-line); color: var(--rarity-color); background: var(--rarity-tint); }
 .achievement-toggle.reached { color: #8c929d; }
+.achievement-goals-section { margin-top: 35px; padding-top: 26px; border-top: 1px solid rgba(255,255,255,.055); }
+.goals-heading { margin-bottom: 17px; }
+.empty-hall-of-fame { display: flex; min-height: 214px; align-items: center; justify-content: center; flex-direction: column; padding: 25px; border: 1px dashed rgba(229,195,106,.18); border-radius: 13px; background: radial-gradient(circle at 50% 25%, rgba(229,195,106,.055), transparent 45%); text-align: center; }
+.hall-empty-crest { width: 49px; height: 49px; margin-bottom: 12px; border-radius: 15px; color: #bca65d; opacity: .85; }
+.empty-hall-of-fame h3 { margin: 0 0 6px; color: #e8e6eb; font: 650 14px var(--font-display); }
+.empty-hall-of-fame p { max-width: 390px; margin: 0 0 14px; color: #858c9b; font-size: 10px; line-height: 1.55; }
+.all-goals-complete { display: flex; align-items: center; gap: 12px; padding: 15px; border: 1px solid rgba(139,215,187,.15); border-radius: 11px; background: rgba(139,215,187,.035); }
+.all-goals-complete-icon { display: grid; width: 34px; height: 34px; flex: none; place-items: center; border: 1px solid rgba(139,215,187,.2); border-radius: 10px; color: #8bd7bb; background: rgba(139,215,187,.08); }
+.all-goals-complete > div { flex: 1; }
+.all-goals-complete strong { color: #d7efe5; font-size: 11px; }
+.all-goals-complete p { margin: 3px 0 0; color: #82918d; font-size: 9px; }
+.achievement-unlock-enter-active { transition: opacity .35s ease, transform .4s cubic-bezier(.2,.8,.2,1); }
+.achievement-unlock-enter-from { opacity: 0; transform: translateY(12px) scale(.96); }
 .empty-achievements { display: flex; min-height: 230px; align-items: center; justify-content: center; flex-direction: column; padding: 28px; border: 1px dashed rgba(255,255,255,.12); border-radius: 12px; text-align: center; }
 .empty-achievements h3 { margin: 0 0 6px; font: 600 14px var(--font-display); }
 .empty-achievements p { max-width: 360px; margin: 0 0 15px; color: #858c9b; font-size: 11px; line-height: 1.5; }
@@ -378,6 +406,10 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .rarity-select option { color: #e7e8ed; background: #171b25; }
 .achievement-reached-control { display: flex; align-items: center; gap: 9px; color: #c9cbd4; font-size: 10px; cursor: pointer; }
 .achievement-reached-control input { width: 15px; height: 15px; accent-color: #b4a5ff; }
+.achievement-icon-picker { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 9px; }
+.achievement-icon-picker button { display: grid; width: 31px; height: 31px; place-items: center; border: 1px solid rgba(255,255,255,.08); border-radius: 8px; color: #c6c9d2; background: rgba(255,255,255,.025); font-size: 16px; cursor: pointer; transition: border-color .15s, background .15s, transform .15s; }
+.achievement-icon-picker button:hover { transform: translateY(-1px); border-color: rgba(169,152,255,.24); }
+.achievement-icon-picker button.selected { border-color: rgba(169,152,255,.4); background: rgba(169,152,255,.11); }
 .completion-modal-copy { display: grid; justify-items: center; gap: 13px; padding: 3px 2px 2px; text-align: center; }
 .completion-modal-icon { width: 54px; height: 54px; border: 1px solid rgba(229,195,106,.2); border-radius: 16px; }
 .completion-modal-copy > p { max-width: 350px; margin: 0; color: #9ba1ae; font-size: 12px; line-height: 1.55; }
@@ -428,6 +460,12 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   .detail-actions { align-self: flex-end; margin-top: -5px; }
   .page-footer { margin-top: 34px; }
   .achievement-overview { grid-template-columns: 1fr; }
+  .hall-of-fame-banner { gap: 12px; padding: 17px; }
+  .hall-of-fame-banner-copy h2 { font-size: 16px; }
+  .hall-of-fame-total strong { font-size: 29px; }
+  .all-goals-complete { flex-wrap: wrap; }
+  .all-goals-complete > div { min-width: calc(100% - 50px); }
+  .all-goals-complete .button { margin-left: 46px; }
   .achievements-heading { flex-direction: column; }
   .achievement-filters { width: 100%; }
   .project-achievement-prompt { align-items: flex-start; flex-wrap: wrap; }
@@ -461,6 +499,17 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   .project-overview-head { grid-template-columns: auto minmax(0, 1fr); gap: 8px; }
   .project-overview-head .project-status { grid-column: 2; justify-self: start; margin-top: -4px; }
   .achievements-grid { grid-template-columns: 1fr; }
+  .rarity-counts { gap: 2px; padding: 8px 4px; }
+  .rarity-count { flex-direction: column; gap: 3px; font-size: 8px; }
+  .hall-of-fame-banner { align-items: flex-start; gap: 10px; padding: 14px; }
+  .hall-of-fame-crest { width: 45px; height: 45px; border-radius: 14px; }
+  .hall-of-fame-banner-copy { flex: 1; min-width: 0; }
+  .hall-of-fame-banner-copy h2 { font-size: 14px; }
+  .hall-of-fame-banner-copy p { max-width: 190px; font-size: 9px; line-height: 1.45; }
+  .hall-of-fame-total { gap: 2px; }
+  .hall-of-fame-total strong { font-size: 25px; }
+  .hall-of-fame-total span { font-size: 8px; white-space: nowrap; }
+  .hall-of-fame-card .achievement-icon { width: 42px; height: 42px; font-size: 22px; }
   .project-card { min-height: 205px; }
   .project-controls { gap: 9px; }
   .search-box kbd { display: none; }

@@ -31,18 +31,23 @@ const linkAchievementId = ref<number | null>(null);
 const linkMarkAchieved = ref(false);
 const achievementFilter = ref<'all' | AchievementRarity>('all');
 const savingIds = ref<Set<number>>(new Set());
+const savingAchievementIds = ref<Set<number>>(new Set());
 const progressWrites = new Map<number, number>();
+const achievementWriteQueues = new Map<number, Promise<void>>();
 const backupInput = ref<HTMLInputElement | null>(null);
 const projectForm = reactive<ProjectPayload>({ name: '', description: '', color: '#9a8cff', icon: 'sparkles', difficulty: 'medium', targetDate: null });
 const areaForm = reactive<SubareaPayload>({ name: '', description: '', progress: 0, weight: 1 });
-const achievementForm = reactive<AchievementPayload>({ name: '', description: '', rarity: 'bronze', achieved: false, achievedAt: null, icon: '🏆', projectId: null });
+const achievementForm = reactive<AchievementPayload>({ name: '', description: '', rarity: 'bronze', progress: 0, achieved: false, achievedAt: null, icon: '🏆', projectId: null });
 
 const selectedProject = computed(() => projects.value.find((project) => project.id === selectedProjectId.value) ?? null);
 const selectedProjectColor = computed(() => selectedProject.value?.color ?? '#9a8cff');
 const projectNames = computed(() => new Map(projects.value.map((project) => [project.id, project.name])));
 const achievedAchievements = computed(() => achievements.value.filter((achievement) => achievement.achieved));
 const achievedByRarity = computed(() => Object.fromEntries(rarityOptions.map((option) => [option.id, achievedAchievements.value.filter((achievement) => achievement.rarity === option.id).length])) as Record<AchievementRarity, number>);
-const visibleAchievements = computed(() => achievements.value.filter((achievement) => achievementFilter.value === 'all' || achievement.rarity === achievementFilter.value).sort((a, b) => Number(b.achieved) - Number(a.achieved) || (b.achievedAt ?? '').localeCompare(a.achievedAt ?? '') || a.name.localeCompare(b.name, 'de')));
+const matchesAchievementFilter = (achievement: Achievement) => achievementFilter.value === 'all' || achievement.rarity === achievementFilter.value;
+const hallOfFameAchievements = computed(() => achievedAchievements.value.filter(matchesAchievementFilter).sort((a, b) => (b.achievedAt ?? '').localeCompare(a.achievedAt ?? '') || a.name.localeCompare(b.name, 'de')));
+const progressAchievements = computed(() => achievements.value.filter((achievement) => !achievement.achieved).sort((a, b) => b.progress - a.progress || b.updatedAt.localeCompare(a.updatedAt)));
+const visibleProgressAchievements = computed(() => progressAchievements.value.filter(matchesAchievementFilter));
 const overviewProjects = computed(() => [...projects.value].sort((a, b) => {
   const statusOrder = (project: Project) => project.progress >= 100 ? 2 : project.progress === 0 ? 1 : 0;
   const aStatus = statusOrder(a);
@@ -76,6 +81,7 @@ const difficultyOptions: Array<{ id: ProjectDifficulty; label: string }> = [
   { id: 'hard', label: 'Schwer' }, { id: 'very-hard', label: 'Sehr schwer' }
 ];
 const difficultyLabels = Object.fromEntries(difficultyOptions.map((option) => [option.id, option.label])) as Record<ProjectDifficulty, string>;
+const achievementIconOptions = ['🏆', '🌟', '🔥', '🌱', '💪', '🎯', '🧗', '📚', '🚀', '🧘', '🏃', '✨'];
 const selectedProjectIcon = computed(() => {
   const project = selectedProject.value;
   return iconOptions.find((option) => option.id === project?.icon)?.icon ?? Sparkles;
@@ -137,12 +143,18 @@ function resetAchievementForm(achievement?: Achievement, projectId: number | nul
   achievementForm.name = achievement?.name ?? '';
   achievementForm.description = achievement?.description ?? '';
   achievementForm.rarity = achievement?.rarity ?? 'bronze';
+  achievementForm.progress = achievement?.progress ?? 0;
   achievementForm.achieved = achievement?.achieved ?? false;
   achievementForm.achievedAt = achievement?.achievedAt ?? null;
   achievementForm.icon = achievement?.icon ?? '🏆';
   achievementForm.projectId = achievement?.projectId ?? projectId;
   achievementEditId.value = achievement?.id ?? null;
   modalMode.value = 'achievement';
+}
+
+function syncAchievementFormStatus() {
+  achievementForm.progress = achievementForm.achieved ? 100 : 0;
+  achievementForm.achievedAt = achievementForm.achieved ? (achievementForm.achievedAt || localDateToday()) : null;
 }
 
 function closeModal() {
@@ -179,7 +191,9 @@ async function saveSubarea() {
 async function saveAchievement() {
   const editing = achievementEditId.value !== null;
   try {
-    const payload = { ...achievementForm, name: achievementForm.name.trim(), achievedAt: achievementForm.achieved ? (achievementForm.achievedAt || localDateToday()) : null };
+    const progress = achievementForm.achieved ? 100 : achievementForm.progress;
+    const achieved = progress === 100;
+    const payload = { ...achievementForm, progress, achieved, name: achievementForm.name.trim(), achievedAt: achieved ? (achievementForm.achievedAt || localDateToday()) : null };
     if (achievementEditId.value !== null) await dataStore.updateAchievement(achievementEditId.value, payload);
     else await dataStore.createAchievement(payload);
     modalMode.value = null;
@@ -193,11 +207,44 @@ async function toggleAchievement(achievement: Achievement, achieved: boolean) {
   try {
     await dataStore.updateAchievement(achievement.id, {
       name: achievement.name, description: achievement.description, rarity: achievement.rarity,
-      achieved, achievedAt: achieved ? localDateToday() : null, icon: achievement.icon, projectId: achievement.projectId
+      progress: achieved ? 100 : 0, achieved, achievedAt: achieved ? localDateToday() : null, icon: achievement.icon, projectId: achievement.projectId
     });
     await loadProjects();
     showToast(achieved ? 'Achievement freigeschaltet' : 'Achievement zurückgesetzt');
   } catch (error) { showToast(error instanceof Error ? error.message : 'Achievement konnte nicht aktualisiert werden.'); }
+}
+
+function updateAchievementProgress(achievement: Achievement, value: number) {
+  const progress = Math.min(100, Math.max(0, Math.round(value / 5) * 5));
+  const achieved = progress === 100;
+  const achievedAt = achieved ? (achievement.achievedAt || localDateToday()) : null;
+  const payload: AchievementPayload = {
+    name: achievement.name,
+    description: achievement.description,
+    rarity: achievement.rarity,
+    progress,
+    achieved,
+    achievedAt,
+    icon: achievement.icon,
+    projectId: achievement.projectId
+  };
+  const optimistic: Achievement = { ...achievement, ...payload, updatedAt: new Date().toISOString() };
+  achievements.value = achievements.value.map((item) => item.id === achievement.id ? optimistic : item);
+  if (achieved) showToast(`„${achievement.name}“ freigeschaltet`);
+
+  savingAchievementIds.value = new Set([...savingAchievementIds.value, achievement.id]);
+  const previousWrite = achievementWriteQueues.get(achievement.id) ?? Promise.resolve();
+  const write = previousWrite.catch(() => undefined).then(() => dataStore.updateAchievement(achievement.id, payload));
+  achievementWriteQueues.set(achievement.id, write);
+  void write.catch(async (error: unknown) => {
+    if (achievementWriteQueues.get(achievement.id) !== write) return;
+    achievements.value = await dataStore.achievements();
+    showToast(error instanceof Error ? error.message : 'Fortschritt konnte nicht gespeichert werden.');
+  }).finally(() => {
+    if (achievementWriteQueues.get(achievement.id) !== write) return;
+    achievementWriteQueues.delete(achievement.id);
+    savingAchievementIds.value = new Set([...savingAchievementIds.value].filter((id) => id !== achievement.id));
+  });
 }
 
 async function removeAchievement(achievement: Achievement) {
@@ -234,6 +281,7 @@ async function linkExistingAchievement() {
     const markAchieved = linkMarkAchieved.value && !achievement.achieved;
     await dataStore.updateAchievement(achievement.id, {
       name: achievement.name, description: achievement.description, rarity: achievement.rarity,
+      progress: markAchieved ? 100 : achievement.progress,
       achieved: achievement.achieved || markAchieved,
       achievedAt: achievement.achievedAt ?? (markAchieved ? localDateToday() : null),
       icon: achievement.icon, projectId
@@ -386,7 +434,7 @@ onMounted(async () => {
       <nav class="side-nav" aria-label="Hauptnavigation">
         <button :class="{ active: view === 'overview' && !selectedProject }" @click="goTo('overview')"><LayoutDashboard :size="17" /><span>Übersicht</span></button>
         <button :class="{ active: view === 'projects' }" @click="goTo('projects')"><FolderKanban :size="17" /><span>Projekte</span><span class="nav-count">{{ projects.length }}</span></button>
-        <button :class="{ active: view === 'achievements' }" @click="goTo('achievements')"><Trophy :size="17" /><span>Achievements</span><span class="nav-count">{{ achievedAchievements.length }}</span></button>
+        <button :class="{ active: view === 'achievements' }" @click="goTo('achievements')"><Trophy :size="17" /><span>Hall of Fame</span><span class="nav-count">{{ achievedAchievements.length }}</span></button>
       </nav>
 
       <div class="sidebar-projects">
@@ -407,7 +455,7 @@ onMounted(async () => {
     <main class="main-area">
       <header class="topbar">
         <div class="mobile-brand"><span class="brand-mark"><Sparkles :size="17" /></span><b>progress<span>planner</span></b></div>
-        <div class="breadcrumbs"><span>Mein Workspace</span><ArrowRight :size="13" /><strong>{{ selectedProject?.name ?? (view === 'projects' ? 'Projekte' : view === 'achievements' ? 'Achievements' : 'Übersicht') }}</strong></div>
+        <div class="breadcrumbs"><span>Mein Workspace</span><ArrowRight :size="13" /><strong>{{ selectedProject?.name ?? (view === 'projects' ? 'Projekte' : view === 'achievements' ? 'Hall of Fame' : 'Übersicht') }}</strong></div>
         <div class="topbar-right">
           <span class="today-label"><CalendarDays :size="15" />{{ today }}</span>
           <button class="icon-button data-action" aria-label="Alle Daten als JSON sichern" title="JSON-Sicherung exportieren" @click="exportBackup"><Download :size="16" /></button>
@@ -447,19 +495,33 @@ onMounted(async () => {
 
         <template v-else-if="view === 'achievements'">
           <section class="welcome-header achievement-welcome">
-            <div><span class="eyebrow">DEINE PERSÖNLICHE SAMMLUNG</span><h1>Achievements</h1><p>Halte fest, was dir wichtig ist. Seltenheit und Status bestimmst du selbst.</p></div>
-            <button class="button button-primary create-button" @click="resetAchievementForm()"><Plus :size="17" /> Neues Achievement</button>
+            <div><span class="eyebrow">DEINE MEILENSTEINE</span><h1>Hall of Fame</h1><p>Setze dir persönliche Ziele und halte deine erreichten Erfolge fest.</p></div>
+            <button class="button button-primary create-button" @click="resetAchievementForm()"><Plus :size="17" /> Neues Ziel</button>
+          </section>
+
+          <section class="hall-of-fame-banner">
+            <div class="hall-of-fame-crest"><Trophy :size="25" /></div>
+            <div class="hall-of-fame-banner-copy"><span class="eyebrow">DEINE PERSÖNLICHE SAMMLUNG</span><h2>Jeder Erfolg gehört hierher.</h2><p>Dein Einsatz, deine Regeln, deine Trophäen.</p></div>
+            <div class="hall-of-fame-total"><strong>{{ achievedAchievements.length }}</strong><span>freigeschaltet</span></div>
           </section>
 
           <section class="achievement-overview">
-            <div class="achievement-total-card"><span class="achievement-total-icon rarity-gold"><Trophy :size="19" /></span><div><small>ERREICHTE ACHIEVEMENTS</small><strong>{{ achievedAchievements.length }}<span> / {{ achievements.length }}</span></strong></div></div>
             <div class="rarity-counts"><div v-for="rarity in rarityOptions" :key="rarity.id" class="rarity-count" :class="`rarity-${rarity.id}`"><i></i><span>{{ rarity.label }}</span><strong>{{ achievedByRarity[rarity.id] }}</strong></div></div>
           </section>
 
           <section class="achievements-section">
-            <div class="section-heading achievements-heading"><div><div class="eyebrow">DEINE ERFOLGE</div><h2>Sammlung <span>{{ visibleAchievements.length }}</span></h2><p>Unabhängig von Projekten oder mit einem Projekt verbunden.</p></div><div class="achievement-filters" role="group" aria-label="Nach Seltenheit filtern"><button :class="{ selected: achievementFilter === 'all' }" @click="achievementFilter = 'all'">Alle</button><button v-for="rarity in rarityOptions" :key="rarity.id" :class="[`rarity-${rarity.id}`, { selected: achievementFilter === rarity.id }]" @click="achievementFilter = rarity.id">{{ rarity.label }}</button></div></div>
-            <div v-if="visibleAchievements.length" class="achievements-grid"><AchievementCard v-for="achievement in visibleAchievements" :key="achievement.id" :achievement="achievement" :project-name="achievement.projectId ? projectNames.get(achievement.projectId) : undefined" @edit="resetAchievementForm(achievement)" @delete="removeAchievement(achievement)" @toggle="toggleAchievement(achievement, $event)" /></div>
-            <div v-else class="empty-achievements"><div class="empty-illustration"><Trophy :size="23" /></div><h3>{{ achievements.length ? 'Keine Achievements in dieser Stufe.' : 'Deine Sammlung beginnt hier.' }}</h3><p>{{ achievements.length ? 'Wähle einen anderen Filter, um weitere Erfolge zu sehen.' : 'Erstelle eigene Meilensteine und entscheide selbst, wann du sie freischaltest.' }}</p><button v-if="!achievements.length" class="button button-primary" @click="resetAchievementForm()"><Plus :size="16" /> Erstes Achievement erstellen</button></div>
+            <div class="section-heading achievements-heading"><div><div class="eyebrow">DEINE TROPHÄEN</div><h2>Hall of Fame <span>{{ hallOfFameAchievements.length }}</span></h2><p>Freigeschaltete Erfolge, die du jederzeit wieder ansehen kannst.</p></div><div class="achievement-filters" role="group" aria-label="Nach Seltenheit filtern"><button :class="{ selected: achievementFilter === 'all' }" @click="achievementFilter = 'all'">Alle</button><button v-for="rarity in rarityOptions" :key="rarity.id" :class="[`rarity-${rarity.id}`, { selected: achievementFilter === rarity.id }]" @click="achievementFilter = rarity.id">{{ rarity.label }}</button></div></div>
+            <TransitionGroup v-if="hallOfFameAchievements.length" name="achievement-unlock" tag="div" class="achievements-grid hall-of-fame-grid">
+              <AchievementCard v-for="achievement in hallOfFameAchievements" :key="achievement.id" :achievement="achievement" :project-name="achievement.projectId ? projectNames.get(achievement.projectId) : undefined" @edit="resetAchievementForm(achievement)" @delete="removeAchievement(achievement)" @toggle="toggleAchievement(achievement, $event)" />
+            </TransitionGroup>
+            <div v-else class="empty-hall-of-fame"><div class="hall-empty-crest"><Trophy :size="23" /></div><h3>{{ achievedAchievements.length ? 'Noch kein Erfolg in dieser Stufe.' : 'Deine Bühne wartet auf dich.' }}</h3><p>{{ achievedAchievements.length ? 'Wähle einen anderen Seltenheitsfilter.' : 'Lege dir ein persönliches Ziel an. Wenn du 100 % erreichst, zieht es hier in deine Hall of Fame ein.' }}</p><button v-if="!achievements.length" class="button button-primary" @click="resetAchievementForm()"><Plus :size="15" /> Erstes Ziel festlegen</button></div>
+          </section>
+
+          <section v-if="progressAchievements.length || achievements.length" class="achievement-goals-section">
+            <div class="section-heading goals-heading"><div><div class="eyebrow">ZIELE &amp; FORTSCHRITT</div><h2>Auf dem Weg <span>{{ progressAchievements.length }}</span></h2><p>Bewege den Regler in 5-%-Schritten. Bei 100 % wird dein Achievement freigeschaltet.</p></div></div>
+            <div v-if="visibleProgressAchievements.length" class="achievements-grid goal-achievements-grid"><AchievementCard v-for="achievement in visibleProgressAchievements" :key="achievement.id" :achievement="achievement" :project-name="achievement.projectId ? projectNames.get(achievement.projectId) : undefined" :saving="savingAchievementIds.has(achievement.id)" @edit="resetAchievementForm(achievement)" @delete="removeAchievement(achievement)" @toggle="toggleAchievement(achievement, $event)" @progress="updateAchievementProgress(achievement, $event)" /></div>
+            <div v-else-if="progressAchievements.length" class="empty-achievements"><div class="empty-illustration"><Trophy :size="23" /></div><h3>Keine offenen Ziele in dieser Stufe.</h3><p>Wähle einen anderen Filter, um weitere Ziele zu sehen.</p></div>
+            <div v-else class="all-goals-complete"><span class="all-goals-complete-icon"><CheckCircle2 :size="19" /></span><div><strong>Alle Ziele erreicht</strong><p>Setze dir ein neues persönliches Ziel für deine nächste Trophäe.</p></div><button class="button button-quiet" @click="resetAchievementForm()"><Plus :size="15" /> Neues Ziel</button></div>
           </section>
         </template>
 
@@ -527,9 +589,9 @@ onMounted(async () => {
           <label class="form-field"><span>Name <b>*</b></span><input v-model="achievementForm.name" required maxlength="120" placeholder="z. B. Erster Halbmarathon" autofocus /></label>
           <label class="form-field"><span>Beschreibung</span><textarea v-model="achievementForm.description" rows="3" maxlength="500" placeholder="Was macht diesen Erfolg für dich besonders?"></textarea></label>
           <label class="form-field"><span>Seltenheitsstufe</span><select v-model="achievementForm.rarity" class="rarity-select"><option v-for="rarity in rarityOptions" :key="rarity.id" :value="rarity.id">{{ rarity.label }}</option></select></label>
-          <label class="form-field"><span>Symbol <small>optional</small></span><input v-model="achievementForm.icon" maxlength="8" placeholder="🏆" aria-label="Achievement-Symbol" /></label>
+          <div class="form-field"><span>Persönliches Symbol <small>Emoji oder eigenes Zeichen</small></span><input v-model="achievementForm.icon" maxlength="8" placeholder="🏆" aria-label="Achievement-Symbol" /><div class="achievement-icon-picker" role="group" aria-label="Symbol auswählen"><button v-for="icon in achievementIconOptions" :key="icon" type="button" :aria-label="`Symbol ${icon}`" :class="{ selected: achievementForm.icon === icon }" @click="achievementForm.icon = icon">{{ icon }}</button></div></div>
           <label class="form-field"><span>Projekt <small>optional</small></span><select v-model="achievementForm.projectId" class="rarity-select"><option :value="null">Unabhängig von Projekten</option><option v-for="project in projects" :key="project.id" :value="project.id">{{ project.name }}</option></select></label>
-          <label class="achievement-reached-control"><input v-model="achievementForm.achieved" type="checkbox" @change="achievementForm.achievedAt = achievementForm.achieved ? (achievementForm.achievedAt || localDateToday()) : null" /><span>Dieses Achievement ist erreicht</span></label>
+          <label class="achievement-reached-control"><input v-model="achievementForm.achieved" type="checkbox" @change="syncAchievementFormStatus" /><span>Dieses Achievement ist bereits erreicht</span></label>
           <label v-if="achievementForm.achieved" class="form-field"><span>Erreichungsdatum <b>*</b></span><input v-model="achievementForm.achievedAt" type="date" required /></label>
           <div class="modal-actions"><button type="button" class="button button-quiet" @click="closeModal">Abbrechen</button><button class="button button-primary" type="submit">{{ achievementEditId ? 'Änderungen speichern' : 'Achievement erstellen' }} <ArrowRight :size="15" /></button></div>
         </form>

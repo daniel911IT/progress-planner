@@ -53,6 +53,7 @@ export interface Achievement {
   name: string;
   description: string;
   rarity: AchievementRarity;
+  progress: number;
   achieved: boolean;
   achievedAt: string | null;
   icon: string;
@@ -79,7 +80,7 @@ export interface HistoryRecord extends HistoryDraft {
 
 export interface BackupFile {
   format: 'progress-planner-backup';
-  version: 5;
+  version: 6;
   exportedAt: string;
   projects: ProjectRecord[];
   subareas: Subarea[];
