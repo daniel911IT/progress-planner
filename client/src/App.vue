@@ -47,7 +47,6 @@ const achievedByRarity = computed(() => Object.fromEntries(rarityOptions.map((op
 const matchesAchievementFilter = (achievement: Achievement) => achievementFilter.value === 'all' || achievement.rarity === achievementFilter.value;
 const hallOfFameCollection = computed(() => achievements.value.filter((achievement) => achievement.achieved && achievement.inHallOfFame).sort((a, b) => (b.achievedAt ?? '').localeCompare(a.achievedAt ?? '') || a.name.localeCompare(b.name, 'de')));
 const hallOfFameAchievements = computed(() => hallOfFameCollection.value.filter(matchesAchievementFilter));
-const hallByRarity = computed(() => Object.fromEntries(rarityOptions.map((option) => [option.id, hallOfFameCollection.value.filter((achievement) => achievement.rarity === option.id).length])) as Record<AchievementRarity, number>);
 const visibleAchievements = computed(() => achievements.value.filter(matchesAchievementFilter).sort((a, b) => Number(b.achieved) - Number(a.achieved) || b.progress - a.progress || a.name.localeCompare(b.name, 'de')));
 const overviewProjects = computed(() => [...projects.value].sort((a, b) => {
   const statusOrder = (project: Project) => project.progress >= 100 ? 2 : project.progress === 0 ? 1 : 0;
@@ -514,7 +513,7 @@ onMounted(async () => {
 
         <template v-else-if="view === 'achievements'">
           <section class="welcome-header achievement-welcome">
-            <div><span class="eyebrow">DEINE SAMMLUNG</span><h1>Achievements</h1><p>Erstelle persönliche Ziele, verfolge Fortschritt und verwalte deine Erfolge.</p></div>
+            <div><h1>Achievements</h1></div>
             <button class="button button-primary create-button" @click="resetAchievementForm()"><Plus :size="17" /> Neues Achievement</button>
           </section>
           <section class="achievement-overview">
@@ -522,25 +521,15 @@ onMounted(async () => {
             <div class="rarity-counts"><div v-for="rarity in rarityOptions" :key="rarity.id" class="rarity-count" :class="`rarity-${rarity.id}`"><i></i><span>{{ rarity.label }}</span><strong>{{ achievedByRarity[rarity.id] }}</strong></div></div>
           </section>
           <section class="achievements-section">
-            <div class="section-heading achievements-heading"><div><div class="eyebrow">ZIELE &amp; ERFOLGE</div><h2>Alle Achievements <span>{{ visibleAchievements.length }}</span></h2><p>Mehrere Ziele auf einen Blick; offene Ziele lassen sich direkt in den Karten pflegen.</p></div><div class="achievement-filters" role="group" aria-label="Nach Seltenheit filtern"><button :class="{ selected: achievementFilter === 'all' }" @click="achievementFilter = 'all'">Alle</button><button v-for="rarity in rarityOptions" :key="rarity.id" :class="[`rarity-${rarity.id}`, { selected: achievementFilter === rarity.id }]" @click="achievementFilter = rarity.id">{{ rarity.label }}</button></div></div>
+            <div class="section-heading achievements-heading"><div><h2>Alle Achievements <span>{{ visibleAchievements.length }}</span></h2></div><div class="achievement-filters" role="group" aria-label="Nach Seltenheit filtern"><button :class="{ selected: achievementFilter === 'all' }" @click="achievementFilter = 'all'">Alle</button><button v-for="rarity in rarityOptions" :key="rarity.id" :class="[`rarity-${rarity.id}`, { selected: achievementFilter === rarity.id }]" @click="achievementFilter = rarity.id">{{ rarity.label }}</button></div></div>
             <div v-if="visibleAchievements.length" class="achievements-grid"><AchievementCard v-for="achievement in visibleAchievements" :key="achievement.id" :achievement="achievement" :project-name="achievement.projectId ? projectNames.get(achievement.projectId) : undefined" :saving="savingAchievementIds.has(achievement.id)" @edit="resetAchievementForm(achievement)" @delete="removeAchievement(achievement)" @toggle="toggleAchievement(achievement, $event)" @progress="updateAchievementProgress(achievement, $event)" @hall-of-fame="setAchievementHallOfFame(achievement, $event)" /></div>
             <div v-else class="empty-achievements"><div class="empty-illustration"><Trophy :size="23" /></div><h3>{{ achievements.length ? 'Keine Achievements in dieser Stufe.' : 'Deine Sammlung beginnt hier.' }}</h3><p>{{ achievements.length ? 'Wähle einen anderen Filter.' : 'Erstelle dein erstes Ziel und arbeite Schritt für Schritt auf den Erfolg hin.' }}</p><button v-if="!achievements.length" class="button button-primary" @click="resetAchievementForm()"><Plus :size="16" /> Erstes Achievement erstellen</button></div>
           </section>
         </template>
 
         <template v-else-if="view === 'hall-of-fame'">
-          <section class="welcome-header achievement-welcome">
-            <div><span class="eyebrow">DEINE AUSGEWÄHLTEN ERFOLGE</span><h1>Hall of Fame</h1><p>Deine persönlichen Erfolge als besondere Orden.</p></div>
-            <button class="button button-quiet create-button" @click="goTo('achievements')">Achievements verwalten <ArrowRight :size="15" /></button>
-          </section>
-          <section class="hall-of-fame-banner">
-            <div class="hall-of-fame-crest"><Trophy :size="25" /></div>
-            <div class="hall-of-fame-banner-copy"><span class="eyebrow">DEINE PERSÖNLICHE AUSZEICHNUNGSSAMMLUNG</span><h2>Verdiente Orden. Eigene Geschichte.</h2><p>Nur Erfolge, die du selbst aufgenommen hast.</p></div>
-            <div class="hall-of-fame-total"><strong>{{ hallOfFameCollection.length }}</strong><span>Orden</span></div>
-          </section>
-          <section class="achievement-overview hall-rarity-overview"><div class="rarity-counts"><div v-for="rarity in rarityOptions" :key="rarity.id" class="rarity-count" :class="`rarity-${rarity.id}`"><i></i><span>{{ rarity.label }}</span><strong>{{ hallByRarity[rarity.id] }}</strong></div></div></section>
           <section class="achievements-section">
-            <div class="section-heading achievements-heading"><div><div class="eyebrow">DEINE ORDEN</div><h2>Auszeichnungen <span>{{ hallOfFameAchievements.length }}</span></h2><p>Wähle mehrere Achievements aus und stelle deine Sammlung zusammen.</p></div><div class="achievement-filters" role="group" aria-label="Orden nach Seltenheit filtern"><button :class="{ selected: achievementFilter === 'all' }" @click="achievementFilter = 'all'">Alle</button><button v-for="rarity in rarityOptions" :key="rarity.id" :class="[`rarity-${rarity.id}`, { selected: achievementFilter === rarity.id }]" @click="achievementFilter = rarity.id">{{ rarity.label }}</button></div></div>
+            <div class="section-heading achievements-heading hall-of-fame-heading"><div><h1>Auszeichnungen</h1></div><div class="achievement-filters" role="group" aria-label="Orden nach Seltenheit filtern"><button :class="{ selected: achievementFilter === 'all' }" @click="achievementFilter = 'all'">Alle</button><button v-for="rarity in rarityOptions" :key="rarity.id" :class="[`rarity-${rarity.id}`, { selected: achievementFilter === rarity.id }]" @click="achievementFilter = rarity.id">{{ rarity.label }}</button></div></div>
             <div v-if="hallOfFameAchievements.length" class="achievements-grid hall-of-fame-grid"><AchievementCard v-for="achievement in hallOfFameAchievements" :key="achievement.id" :achievement="achievement" :hall-of-fame="true" :project-name="achievement.projectId ? projectNames.get(achievement.projectId) : undefined" @edit="resetAchievementForm(achievement)" @delete="removeAchievement(achievement)" @toggle="toggleAchievement(achievement, $event)" @hall-of-fame="setAchievementHallOfFame(achievement, $event)" /></div>
             <div v-else class="empty-hall-of-fame"><div class="hall-empty-crest"><Trophy :size="23" /></div><h3>{{ hallOfFameCollection.length ? 'Keine Orden in dieser Seltenheitsstufe.' : achievedAchievements.length ? 'Nimm deine Erfolge in die Sammlung auf.' : 'Deine Bühne wartet auf den ersten Erfolg.' }}</h3><p>{{ hallOfFameCollection.length ? 'Wähle einen anderen Filter, um weitere Orden zu sehen.' : 'Öffne beim erreichten Achievement das Drei-Punkte-Menü und wähle „Zur Hall of Fame“.' }}</p><button class="button button-primary" @click="goTo('achievements')">Zu deinen Achievements <ArrowRight :size="15" /></button></div>
           </section>
@@ -548,7 +537,7 @@ onMounted(async () => {
 
         <template v-else-if="view === 'overview'">
           <section class="welcome-header overview-welcome">
-            <div><span class="eyebrow">FORTSCHRITT DEINER PROJEKTE</span><h1>Übersicht</h1><p>Der aktuelle Stand aller deiner Projekte auf einen Blick.</p></div>
+            <div><h1>Übersicht</h1></div>
           </section>
           <section class="projects-section overview-projects-section" aria-label="Fortschritt aller Projekte">
             <div v-if="isLoading" class="loading-grid"><div v-for="n in 3" :key="n" class="skeleton-card"></div></div>
@@ -559,11 +548,11 @@ onMounted(async () => {
 
         <template v-else>
           <section class="welcome-header">
-            <div><span class="eyebrow">DEINE ZIELE IM BLICK</span><h1>Deine Projekte</h1><p>Alles, woran du gerade arbeitest, an einem Ort.</p></div>
+            <div><h1>Deine Projekte</h1></div>
             <button class="button button-primary create-button" @click="resetProjectForm()"><Plus :size="17" /> Neues Projekt</button>
           </section>
           <section class="projects-section">
-            <div class="section-heading projects-heading"><div><div class="eyebrow">AKTIVE ZIELE</div><h2>Deine Projekte <span>{{ activeProjects.length }}</span></h2><p>Deine offenen Ziele, übersichtlich an einem Ort.</p></div><div class="project-controls"><label class="search-box"><Search :size="16" /><input v-model="search" placeholder="Projekt suchen" aria-label="Projekt suchen" /><kbd>⌘ K</kbd></label></div></div>
+            <div class="section-heading projects-heading"><div><h2>Offene Projekte <span>{{ activeProjects.length }}</span></h2></div><div class="project-controls"><label class="search-box"><Search :size="16" /><input v-model="search" placeholder="Projekt suchen" aria-label="Projekt suchen" /><kbd>⌘ K</kbd></label></div></div>
             <div v-if="isLoading" class="loading-grid"><div v-for="n in 3" :key="n" class="skeleton-card"></div></div>
             <div v-else-if="visibleProjects.length" class="projects-grid"><ProjectCard v-for="project in visibleProjects" :key="project.id" :project="project" @open="openProject(project)" @edit="resetProjectForm(project)" /></div>
             <div v-else-if="projects.length === 0" class="empty-projects"><div class="empty-illustration"><FolderKanban :size="23" /></div><h3>Womit möchtest du beginnen?</h3><p>Erstelle dein erstes Projekt und mache aus einem großen Ziel kleine, machbare Schritte.</p><button class="button button-primary" @click="resetProjectForm()"><Plus :size="16" /> Erstes Projekt erstellen</button></div>
@@ -583,7 +572,7 @@ onMounted(async () => {
       <nav class="mobile-nav" aria-label="Hauptnavigation">
         <button :class="{ active: view === 'overview' && !selectedProject }" @click="goTo('overview')"><LayoutDashboard :size="18" /><span>Übersicht</span></button>
         <button :class="{ active: view === 'projects' || Boolean(selectedProject) }" @click="goTo('projects')"><FolderKanban :size="18" /><span>Projekte</span></button>
-        <button :class="{ active: view === 'achievements' }" @click="goTo('achievements')"><Trophy :size="18" /><span>Ziele</span></button>
+        <button :class="{ active: view === 'achievements' }" @click="goTo('achievements')"><Trophy :size="18" /><span>Achievements</span></button>
         <button :class="{ active: view === 'hall-of-fame' }" @click="goTo('hall-of-fame')"><Award :size="18" /><span>Hall of Fame</span></button>
       </nav>
     </main>

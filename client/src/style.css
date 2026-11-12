@@ -349,6 +349,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .rarity-count strong { color: var(--rarity-color); font: 650 12px var(--font-display); }
 .achievements-section { margin-top: 0; }
 .achievements-heading { align-items: flex-end; }
+.hall-of-fame-heading { margin-bottom: 22px; }
+.hall-of-fame-heading h1 { margin: 0; color: #f0eff5; font: 700 clamp(25px, 3vw, 33px)/1.2 var(--font-display); letter-spacing: -1.2px; }
 .achievement-filters { display: flex; flex-wrap: wrap; gap: 5px; }
 .achievement-filters button { display: inline-flex; min-height: 29px; align-items: center; gap: 6px; padding: 0 9px; border: 1px solid rgba(255,255,255,.07); border-radius: 7px; color: #888f9e; background: rgba(255,255,255,.018); font-size: 9px; cursor: pointer; transition: border-color .15s, color .15s, background .15s; }
 .achievement-filters button::before { width: 6px; height: 6px; border-radius: 50%; background: var(--rarity-color, #939aa8); content: ''; }
